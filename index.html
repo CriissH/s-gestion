@@ -24,6 +24,7 @@
           <button class="nav-item" data-view="categories"><span class="nav-icon">◈</span>Categorías</button>
           <button class="nav-item" data-view="savings"><span class="nav-icon">♡</span>Ahorrado</button>
           <button class="nav-item" data-view="income-history-view"><span class="nav-icon">↗</span>Historial de ingresos</button>
+          <button class="nav-item" data-view="collective"><span class="nav-icon">♧</span>Compra colectiva</button>
           <button class="nav-item" data-view="reports"><span class="nav-icon">▤</span>Reportes</button>
         </nav>
 
@@ -147,6 +148,26 @@
         <section id="view-income-history-view" class="view">
           <div class="section-intro"><div><p class="eyebrow">Movimientos de ingreso</p><h2>Historial de ingresos</h2><p class="muted">Consulta todos los cambios aplicados a tu presupuesto.</p></div></div>
           <div class="panel table-panel"><div id="income-history-page"></div></div>
+        </section>
+        <section id="view-collective" class="view">
+          <div class="section-intro"><div><p class="eyebrow">Organización compartida</p><h2>Compra colectiva</h2><p class="muted">Divide una compra entre varias personas y obtén las transferencias exactas.</p></div><div class="collective-actions"><button class="button button-secondary" id="collective-receipt-button">Generar comprobante ↗</button><button class="button danger-button" id="collective-reset-button">Reiniciar pestaña</button></div></div>
+          <div class="collective-grid">
+            <article class="panel">
+              <div class="panel-heading"><div><h2>Participantes</h2><p class="muted">Escribe un nombre por línea.</p></div></div>
+              <form id="collective-config-form"><label>Nombre de la compra<input class="text-input" id="collective-name" type="text" maxlength="80" placeholder="Ej: Asado del domingo" required /></label><label>Personas<textarea class="text-input" id="collective-people" rows="6" placeholder="Ana&#10;Bruno&#10;Carla" required></textarea></label><button class="button button-primary" type="submit">Guardar participantes</button></form>
+              <div class="empty-state compact" id="collective-no-people">Configura las personas para comenzar.</div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><h2>Registrar compra</h2><p class="muted">Indica quién pagó cada cosa.</p></div></div>
+              <form id="collective-expense-form"><label>Quién pagó<select class="select-input full" id="collective-payer" required></select></label><label>Qué compró<input class="text-input" id="collective-expense-reason" type="text" maxlength="100" placeholder="Ej: Carne y carbón" required /></label><label>Importe<input class="text-input" id="collective-expense-amount" type="number" min="0.01" step="0.01" placeholder="100000" required /></label><button class="button button-primary" type="submit">Agregar compra</button></form>
+              <div id="collective-expenses" class="collective-expenses"></div>
+            </article>
+          </div>
+          <div class="stat-cards collective-stats"><div class="mini-stat"><span class="stat-icon green">∑</span><div><span class="muted">Total comprado</span><strong id="collective-total">$0</strong></div></div><div class="mini-stat"><span class="stat-icon blue">÷</span><div><span class="muted">Parte por persona</span><strong id="collective-share">$0</strong></div></div></div>
+          <div class="collective-grid">
+            <article class="panel"><div class="panel-heading"><div><h2>Transferencias</h2><p class="muted">Quién debe pagarle a quién.</p></div></div><div id="collective-settlements"></div></article>
+            <article class="panel"><div class="panel-heading"><div><h2>Balance por persona</h2><p class="muted">Positivo: debe recibir · Negativo: debe pagar.</p></div></div><div id="collective-balances"></div></article>
+          </div>
         </section>
         <section id="view-recurring-all" class="view">
           <div class="section-intro"><div><p class="eyebrow">Planificación</p><h2>Todos los gastos recurrentes</h2><p class="muted">Administra tus gastos diarios, semanales y mensuales.</p></div></div>

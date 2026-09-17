@@ -30,6 +30,8 @@ Como alternativa, también se puede abrir `index.html` directamente con doble cl
 - Aplicación Tauri v2 preparada para generar instaladores `.msi` y `.exe` de Windows.
 - Modo oscuro persistente desde Configuración.
 - Sección `Ahorrado` con transferencia automática del saldo positivo al cerrar cada ciclo e historial por ciclo.
+- Respaldos completos compatibles con Excel: incluyen configuración, gastos, categorías, historial de ingresos, movimientos e historial de ahorros, correcciones, recurrencias y compras colectivas.
+- Herramienta de `Compra colectiva` para registrar participantes y pagadores, dividir el total y generar un comprobante de transferencias.
 - Gastos recurrentes diarios, semanales y mensuales. Los mensuales usan un día de facturación del 1 al 31 y se ajustan automáticamente al último día disponible en meses más cortos.
 - Los gastos únicos solo pueden registrarse dentro del ciclo presupuestario actual. Si hay más de tres recurrentes, la barra lateral ofrece una vista completa para administrarlos.
 

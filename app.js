@@ -12,6 +12,7 @@ const defaultCategories = [
   { id: "gifts", name: "Regalos", color: "#c77bcb", icon: "🎁" }
 ];
 const defaultState = {
+  backupVersion: 2,
   income: 0,
   currentCycleIncome: null,
   cutoffDay: 1,
@@ -19,7 +20,9 @@ const defaultState = {
   pendingIncome: null,
   incomeHistory: [],
   recurringConfirmations: {},
+  recurringHistory: [],
   expenseHistory: [],
+  incomeNotice: "",
   darkMode: false,
   testCycleOverride: null,
   dateMode: "system",
@@ -28,6 +31,8 @@ const defaultState = {
   savingsBalance: 0,
   savingsHistory: [],
   savingsMovements: [],
+  collectiveEvents: [],
+  collectiveDraft: { name: "", people: [], expenses: [] },
   categories: structuredClone(defaultCategories),
   expenses: []
 };
@@ -75,7 +80,7 @@ function loadState() {
         : item);
     const categories = [...(saved.categories || [])];
     defaultCategories.forEach(category => { if (!categories.some(item => item.id === category.id)) categories.push({ ...category }); });
-    return { ...defaultState, ...saved, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, expenseHistory: saved.expenseHistory || [], darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [] };
+    return { ...defaultState, ...saved, backupVersion: 2, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, recurringHistory: saved.recurringHistory || [], expenseHistory: saved.expenseHistory || [], incomeNotice: saved.incomeNotice || "", darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [], collectiveEvents: saved.collectiveEvents || [], collectiveDraft: saved.collectiveDraft && Array.isArray(saved.collectiveDraft.people) && Array.isArray(saved.collectiveDraft.expenses) ? saved.collectiveDraft : structuredClone(defaultState.collectiveDraft) };
   } catch {
     return structuredClone(defaultState);
   }
@@ -188,6 +193,7 @@ function render() {
   updateCycle();
   renderSidebarRecurring();
   renderAllRecurring();
+  renderCollective();
   renderRecurringConfirmation();
   document.getElementById("installed-version").textContent = APP_VERSION;
   document.getElementById("dark-mode-toggle").checked = state.darkMode;
@@ -293,6 +299,69 @@ function renderSavings() {
   document.getElementById("savings-cycle-count").textContent = history.length;
   document.getElementById("savings-empty").style.display = history.length || movements.length ? "none" : "block";
   document.getElementById("savings-history").innerHTML = history.map(item => `<div class="income-history-row savings-history-row"><div><strong>${dateFormat(item.start)} – ${dateFormat(item.end)}</strong><span>Ingreso ${money(item.income)} · Gastado ${money(item.spent)}</span></div><b>+${money(item.transferred)}</b></div>`).join("") + movements.map(item => `<div class="income-history-row savings-history-row"><div><strong>${item.type === "deposit" ? "Ingreso de ahorro" : "Extracción de ahorro"}</strong><span>${dateFormat(item.date)} · ${escapeHtml(item.reason)}</span></div><b class="${item.type === "deposit" ? "savings-positive" : "savings-negative"}">${item.type === "deposit" ? "+" : "−"}${money(item.amount)}</b></div>`).join("");
+}
+function collectiveDraft() {
+  if (!state.collectiveDraft || !Array.isArray(state.collectiveDraft.people) || !Array.isArray(state.collectiveDraft.expenses)) state.collectiveDraft = structuredClone(defaultState.collectiveDraft);
+  return state.collectiveDraft;
+}
+function calculateCollectiveSettlements(event = collectiveDraft()) {
+  const people = event.people || [];
+  const total = (event.expenses || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const share = people.length ? total / people.length : 0;
+  const balances = people.map(person => ({ ...person, paid: (event.expenses || []).filter(item => item.payerId === person.id).reduce((sum, item) => sum + Number(item.amount || 0), 0) }));
+  balances.forEach(person => { person.balance = person.paid - share; });
+  const creditors = balances.filter(person => person.balance > 0.005).map(person => ({ ...person, amount: person.balance }));
+  const debtors = balances.filter(person => person.balance < -0.005).map(person => ({ ...person, amount: -person.balance }));
+  const transfers = [];
+  debtors.forEach(debtor => {
+    let remaining = debtor.amount;
+    creditors.forEach(creditor => {
+      if (remaining <= 0.005 || creditor.amount <= 0.005) return;
+      const amount = Math.min(remaining, creditor.amount);
+      transfers.push({ from: debtor.name, to: creditor.name, amount });
+      remaining -= amount;
+      creditor.amount -= amount;
+    });
+  });
+  return { total, share, balances, transfers };
+}
+function renderCollective() {
+  const event = collectiveDraft();
+  const peopleInput = document.getElementById("collective-people");
+  if (!peopleInput) return;
+  document.getElementById("collective-name").value = event.name || "";
+  peopleInput.value = event.people.map(person => person.name).join("\n");
+  const payer = document.getElementById("collective-payer");
+  payer.innerHTML = event.people.map(person => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("");
+  document.getElementById("collective-no-people").hidden = event.people.length > 0;
+  document.getElementById("collective-expenses").innerHTML = event.expenses.map(item => {
+    const person = event.people.find(candidate => candidate.id === item.payerId);
+    return `<div class="collective-expense-row"><div><strong>${escapeHtml(item.reason)}</strong><span>${escapeHtml(person?.name || "Sin persona")}</span></div><b>${money(item.amount)}</b><button class="delete-button" data-delete-collective-expense="${item.id}" aria-label="Eliminar compra">×</button></div>`;
+  }).join("");
+  const result = calculateCollectiveSettlements(event);
+  document.getElementById("collective-total").textContent = money(result.total);
+  document.getElementById("collective-share").textContent = money(result.share);
+  document.getElementById("collective-settlements").innerHTML = result.transfers.length
+    ? result.transfers.map(item => `<div class="collective-transfer"><span>${escapeHtml(item.from)}</span><strong>paga a</strong><span>${escapeHtml(item.to)}</span><b>${money(item.amount)}</b></div>`).join("")
+    : `<div class="empty-state compact">${event.people.length > 1 && event.expenses.length ? "Todos quedan equilibrados." : "Agrega personas y compras para calcular las transferencias."}</div>`;
+  document.getElementById("collective-balances").innerHTML = result.balances.map(person => `<div class="collective-balance"><span>${escapeHtml(person.name)}</span><span>Pagó ${money(person.paid)}</span><b class="${person.balance >= 0 ? "savings-positive" : "savings-negative"}">${person.balance >= 0 ? "+" : "−"}${money(Math.abs(person.balance))}</b></div>`).join("");
+}
+function saveCollectiveDraft() { state.collectiveDraft = collectiveDraft(); saveState(); renderCollective(); }
+function printCollectiveReceipt() {
+  const event = collectiveDraft(), result = calculateCollectiveSettlements(event);
+  if (!event.people.length || !event.expenses.length) return showToast("Agrega personas y compras antes de generar el comprobante.", true);
+  const popup = window.open("", "_blank");
+  if (!popup) return showToast("Permite las ventanas emergentes para generar el comprobante.", true);
+  popup.document.write(`<html><head><title>Comprobante - ${escapeHtml(event.name || "Compra colectiva")}</title><style>body{font-family:Arial;padding:32px;color:#222}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border:1px solid #ccc;padding:8px;text-align:left}h1{color:#177b55}</style></head><body><h1>${escapeHtml(event.name || "Compra colectiva")}</h1><p>Total: <strong>${money(result.total)}</strong> · Parte por persona: <strong>${money(result.share)}</strong></p><h2>Transferencias</h2>${result.transfers.length ? `<table><tr><th>Quién paga</th><th>A quién</th><th>Importe</th></tr>${result.transfers.map(item => `<tr><td>${escapeHtml(item.from)}</td><td>${escapeHtml(item.to)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table>` : "<p>No hay transferencias pendientes.</p>"}<h2>Compras</h2><table><tr><th>Persona</th><th>Razón</th><th>Importe</th></tr>${event.expenses.map(item => `<tr><td>${escapeHtml(event.people.find(person => person.id === item.payerId)?.name || "")}</td><td>${escapeHtml(item.reason)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table><script>window.print()</script></body></html>`);
+  popup.document.close();
+}
+function resetCollective() {
+  state.collectiveEvents = state.collectiveEvents || [];
+  if (collectiveDraft().people.length || collectiveDraft().expenses.length) state.collectiveEvents.push({ ...collectiveDraft(), completedAt: new Date().toISOString() });
+  state.collectiveDraft = structuredClone(defaultState.collectiveDraft);
+  saveState();
+  renderCollective();
+  showToast("Pestaña de compra colectiva reiniciada.");
 }
 function confirmRecurring(templateId, spent) {
   const template = state.expenses.find(item => item.id === templateId);
@@ -432,14 +501,27 @@ function navigate(view) {
   document.querySelectorAll(".view").forEach(section => section.classList.remove("active-view"));
   document.getElementById(`view-${view}`).classList.add("active-view");
   document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view));
-  const titles = { dashboard: "Resumen financiero", statistics: "Estadísticas", expenses: "Gastos", categories: "Categorías", savings: "Ahorrado", "income-history-view": "Historial de ingresos", "recurring-all": "Todos los gastos recurrentes", reports: "Reportes y respaldos", settings: "Configuración" };
+  const titles = { dashboard: "Resumen financiero", statistics: "Estadísticas", expenses: "Gastos", categories: "Categorías", savings: "Ahorrado", "income-history-view": "Historial de ingresos", collective: "Compra colectiva", "recurring-all": "Todos los gastos recurrentes", reports: "Reportes y respaldos", settings: "Configuración" };
   document.getElementById("page-title").textContent = titles[view];
   window.scrollTo({ top: 0, behavior: "auto" });
 }
+function backupTable(title, headers, rows) {
+  return `<h2>${escapeHtml(title)}</h2><table><thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
 function exportBackup() {
-  const payload = JSON.stringify(state);
-  const rows = [["Saldo - Respaldo de datos"], ["Este archivo puede volver a cargarse en Saldo"], [], ["Tipo", "Descripción", "Importe", "Categoría", "Fecha", "Recurrente"], ...state.expenses.map(item => ["Gasto", item.description, item.amount, getCategory(item.categoryId).name, item.date, item.recurring ? "Sí" : "No"])];
-  const html = `<html><head><meta charset="UTF-8"></head><body><table>${rows.map(row => `<tr>${row.map(cell => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</table><!--SALDO_BACKUP:${btoa(unescape(encodeURIComponent(payload)))}--></body></html>`;
+  const payload = JSON.stringify({ format: "saldo-backup", version: 2, exportedAt: new Date().toISOString(), state });
+  const sections = [
+    backupTable("Configuración y resumen", ["Dato", "Valor"], [
+      ["Versión de aplicación", APP_VERSION], ["Ingreso base", state.income], ["Ingreso del ciclo actual", currentIncome()], ["Día de corte", state.cutoffDay], ["Ciclo iniciado", state.lastCycleStart || ""], ["Saldo ahorrado", state.savingsBalance], ["Modo oscuro", state.darkMode ? "Sí" : "No"]
+    ]),
+    backupTable("Categorías", ["ID", "Nombre", "Color", "Ícono"], state.categories.map(item => [item.id, item.name, item.color, item.icon])),
+    backupTable("Gastos", ["ID", "Descripción", "Importe", "Categoría", "Fecha", "Recurrente", "Frecuencia", "Día semanal", "Día mensual", "Origen recurrente"], state.expenses.map(item => [item.id, item.description, item.amount, getCategory(item.categoryId).name, item.date, item.recurring ? "Sí" : "No", item.frequency || "", item.weekday ?? "", item.monthlyDay ?? "", item.recurringSourceId || ""])),
+    backupTable("Historial de ingresos", ["ID", "Importe", "Razón", "Fecha", "Tipo", "Fecha efectiva", "Día de corte"], state.incomeHistory.map(item => [item.id, item.amount, item.reason, item.date, item.type, item.effectiveDate || "", item.cutoffDay])),
+    backupTable("Historial de ahorros", ["Tipo", "Importe", "Razón", "Fecha"], state.savingsMovements.map(item => [item.type, item.amount, item.reason, item.date]).concat(state.savingsHistory.map(item => ["Cierre de ciclo", item.transferred, `Ciclo ${item.start} a ${item.end}`, item.date]))),
+    backupTable("Historial de correcciones", ["Tipo", "Descripción", "Anterior", "Nuevo", "Razón", "Fecha"], state.expenseHistory.map(item => ["Gasto", item.description, item.previousAmount, item.amount, item.reason, item.date]).concat((state.recurringHistory || []).map(item => ["Recurrente", item.description, item.previousAmount, item.amount, `Alcance: ${item.scope}`, item.date]))),
+    backupTable("Compras colectivas", ["Evento", "Participantes", "Gastos", "Creado"], (state.collectiveEvents || []).map(item => [item.name, item.people.map(person => person.name).join(", "), item.expenses.length, item.createdAt]))
+  ].join("");
+  const html = `<html><head><meta charset="UTF-8"><style>body{font-family:Arial;color:#222}table{border-collapse:collapse;margin:0 0 24px;min-width:520px}th,td{border:1px solid #ccc;padding:6px;text-align:left}th{background:#e7f1ec}h1{color:#177b55}</style></head><body><h1>Saldo - Respaldo completo</h1><p>Este archivo contiene configuración, gastos, ingresos, ahorros, historiales, categorías y compras colectivas. Puede volver a cargarse en Saldo.</p>${sections}<!--SALDO_BACKUP:${btoa(unescape(encodeURIComponent(payload)))}--></body></html>`;
   const blob = new Blob([html], { type: "application/vnd.ms-excel" }), link = document.createElement("a");
   link.href = URL.createObjectURL(blob); link.download = `saldo-respaldo-${todayISO()}.xls`; link.click(); URL.revokeObjectURL(link.href); showToast("Respaldo exportado correctamente");
 }
@@ -450,12 +532,13 @@ function importBackup(file) {
       const text = reader.result;
       const encoded = text.match(/SALDO_BACKUP:([^ -]+)/)?.[1];
       if (!encoded) throw new Error("Formato no reconocido");
-      const imported = JSON.parse(decodeURIComponent(escape(atob(encoded))));
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(encoded))));
+      const imported = decoded.state && decoded.format === "saldo-backup" ? decoded.state : decoded;
       if (!Array.isArray(imported.categories) || !Array.isArray(imported.expenses)) throw new Error("Datos inválidos");
       const importedCategories = [...(imported.categories || [])];
       defaultCategories.forEach(category => { if (!importedCategories.some(item => item.id === category.id)) importedCategories.push({ ...category }); });
-      state = { ...defaultState, ...imported, categories: importedCategories, onboardingComplete: true }; saveState(); closeModal("welcome-modal"); render(); showToast("Datos restaurados correctamente");
-    } catch { showToast("No se pudo leer el respaldo. Usa un archivo exportado desde Saldo.", true); }
+      state = { ...defaultState, ...imported, backupVersion: 2, categories: importedCategories, incomeHistory: imported.incomeHistory || [], recurringHistory: imported.recurringHistory || [], expenseHistory: imported.expenseHistory || [], savingsHistory: imported.savingsHistory || [], savingsMovements: imported.savingsMovements || [], collectiveEvents: imported.collectiveEvents || [], onboardingComplete: true }; saveState(); closeModal("welcome-modal"); render(); showToast("Respaldo completo restaurado correctamente");
+    } catch (error) { console.error("Error al importar respaldo", error); showToast("No se pudo leer el respaldo. Usa un archivo exportado desde Saldo.", true); }
   };
   reader.readAsText(file);
 }
@@ -642,6 +725,41 @@ document.getElementById("recurring-edit-form").addEventListener("submit", event 
   render();
 });
 document.getElementById("income-action").addEventListener("change", updateIncomeForm);
+document.getElementById("collective-config-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const names = document.getElementById("collective-people").value.split(/\r?\n|,/).map(name => name.trim()).filter(Boolean);
+  if (names.length < 2) return showToast("Indica al menos dos personas.", true);
+  const unique = names.map(name => name.toLowerCase());
+  if (new Set(unique).size !== unique.length) return showToast("Cada persona debe tener un nombre diferente.", true);
+  const eventState = collectiveDraft();
+  eventState.name = document.getElementById("collective-name").value.trim() || "Compra colectiva";
+  eventState.people = names.map((name, index) => ({ id: eventState.people[index]?.id || crypto.randomUUID(), name }));
+  eventState.expenses = eventState.expenses.filter(item => eventState.people.some(person => person.id === item.payerId));
+  saveCollectiveDraft();
+  showToast("Participantes configurados.");
+});
+document.getElementById("collective-expense-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const eventState = collectiveDraft();
+  const amount = Number(document.getElementById("collective-expense-amount").value);
+  const reason = document.getElementById("collective-expense-reason").value.trim();
+  const payerId = document.getElementById("collective-payer").value;
+  if (!payerId || !amount || amount <= 0 || !reason) return showToast("Completa quién pagó, el importe y la razón.", true);
+  eventState.expenses.push({ id: crypto.randomUUID(), payerId, amount, reason });
+  saveCollectiveDraft();
+  event.target.reset();
+  showToast("Compra colectiva agregada.");
+});
+document.getElementById("collective-people").addEventListener("change", () => {});
+document.getElementById("collective-receipt-button").addEventListener("click", printCollectiveReceipt);
+document.getElementById("collective-reset-button").addEventListener("click", resetCollective);
+document.addEventListener("click", event => {
+  const deleteCollective = event.target.closest("[data-delete-collective-expense]");
+  if (!deleteCollective) return;
+  const eventState = collectiveDraft();
+  eventState.expenses = eventState.expenses.filter(item => item.id !== deleteCollective.dataset.deleteCollectiveExpense);
+  saveCollectiveDraft();
+});
 function openSavingsModal(action) {
   document.getElementById("savings-action").value = action;
   document.getElementById("savings-modal-title").textContent = action === "deposit" ? "Ingresar ahorro" : "Extraer ahorro";
