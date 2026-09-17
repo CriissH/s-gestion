@@ -1,6 +1,6 @@
 [package]
 name = "saldo"
-version = "1.0.6"
+version = "1.0.6-1"
 description = "Gestión personal de gastos"
 authors = ["CriissH"]
 edition = "2021"
