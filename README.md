@@ -50,7 +50,7 @@ El repositorio privado contiene el código Tauri, la configuración y el workflo
 
 ### Flujo de publicación
 
-1. Actualiza la versión en `package.json`, `app.js`, `version.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
+1. Actualiza la versión en `package.json`, `app.js`, `version.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`. Para esta versión, el número es `1.0.5`.
 2. Genera una build firmada desde el repositorio privado con `npm run tauri:build`.
 3. Crea un GitHub Release en `CriissH/s-getion` con el tag correspondiente, por ejemplo `v1.0.2`.
 4. Adjunta el instalador NSIS, su archivo `.sig`, el MSI, su `.sig` y `latest.json`.
