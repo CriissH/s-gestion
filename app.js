@@ -1,5 +1,5 @@
 const STORAGE_KEY = "saldo-expenses-v1";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 const palette = ["#177b55", "#ed9c54", "#8b7ee7", "#5c9ee8", "#d95f59", "#51a68b", "#c77bcb", "#a1a85d"];
 const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉"];
 const defaultState = {
@@ -178,7 +178,7 @@ function render() {
     setTimeout(() => document.getElementById("welcome-income-input").focus(), 0);
   }
 }
-async function checkForUpdate(showNoUpdate = false) {
+async function checkForUpdate(showNoUpdate = false, ignoreDismissed = false) {
   try {
     const updater = window.__TAURI__?.updater;
     if (!updater?.check) {
@@ -186,10 +186,11 @@ async function checkForUpdate(showNoUpdate = false) {
       return;
     }
     const remote = await updater.check();
-    if (remote?.available && remote.version !== localStorage.getItem("saldo-dismissed-update")) {
+    if (remote?.available && (ignoreDismissed || remote.version !== localStorage.getItem("saldo-dismissed-update"))) {
       availableUpdate = remote;
       updateBackupExported = false;
-      document.getElementById("update-message").textContent = `Está disponible la versión ${remote.version}. ${remote.body || "Incluye mejoras y correcciones."}`;
+      document.getElementById("update-message").textContent = `Está disponible la versión ${remote.version}.`;
+      document.getElementById("update-changes-text").textContent = remote.body || "Incluye mejoras y correcciones.";
       document.getElementById("continue-update-button").disabled = true;
       openModal("update-modal");
     } else if (showNoUpdate) showToast("Ya tienes la última versión.");
@@ -642,6 +643,11 @@ document.getElementById("pdf-button").addEventListener("click", () => { navigate
 document.getElementById("export-button").addEventListener("click", exportBackup);
 document.getElementById("restore-button").addEventListener("click", () => document.getElementById("import-file").click());
 document.getElementById("import-button").addEventListener("click", () => document.getElementById("import-file").click());
+document.getElementById("welcome-import-button").addEventListener("click", () => document.getElementById("welcome-import-file").click());
+document.getElementById("welcome-import-file").addEventListener("change", event => {
+  if (event.target.files[0]) importBackup(event.target.files[0]);
+  event.target.value = "";
+});
 document.getElementById("import-file").addEventListener("change", event => { if (event.target.files[0]) importBackup(event.target.files[0]); event.target.value = ""; });
 document.getElementById("reset-system-button").addEventListener("click", () => openModal("reset-modal"));
 document.getElementById("reset-form").addEventListener("submit", event => {
@@ -655,7 +661,7 @@ document.getElementById("reset-form").addEventListener("submit", event => {
   render();
   showToast("Sistema reiniciado. Comienza una nueva configuración.");
 });
-document.getElementById("check-update-button").addEventListener("click", () => checkForUpdate(true));
+document.getElementById("check-update-button").addEventListener("click", () => checkForUpdate(true, true));
 document.getElementById("dark-mode-toggle").addEventListener("change", event => {
   state.darkMode = event.target.checked;
   saveState();
@@ -670,6 +676,7 @@ document.getElementById("export-update-button").addEventListener("click", () => 
 document.getElementById("dismiss-update-button").addEventListener("click", () => {
   if (availableUpdate?.version) localStorage.setItem("saldo-dismissed-update", availableUpdate.version);
   closeModal("update-modal");
+  showToast("Podrás actualizar cuando quieras desde Configuración → Actualizaciones.");
 });
 document.getElementById("continue-update-button").addEventListener("click", () => {
   if (!updateBackupExported || !availableUpdate) return;
@@ -686,4 +693,4 @@ document.getElementById("continue-update-button").addEventListener("click", () =
 });
 window.addEventListener("click", event => { if (event.target.classList.contains("modal-backdrop")) closeModal(event.target.id); });
 render();
-setTimeout(() => checkForUpdate(false), 1200);
+setTimeout(() => checkForUpdate(false, false), 1200);

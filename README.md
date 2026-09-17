@@ -41,6 +41,23 @@ La versión instalada consulta el manifiesto firmado `latest.json` en el reposit
 
 Para publicar una actualización, crea el Release en `CriissH/s-getion` con un tag `vX.Y.Z` y adjunta los artefactos firmados generados desde el repositorio privado. La clave privada de firma debe existir únicamente como secreto `TAURI_SIGNING_PRIVATE_KEY` del repositorio privado; nunca debe incluirse en Git. La versión HTML abierta directamente no puede usar este actualizador nativo.
 
+### Repositorios
+
+- **Código fuente privado:** `https://github.com/CriissH/s-getion-app`
+- **Releases públicos:** `https://github.com/CriissH/s-getion`
+
+El repositorio privado contiene el código Tauri, la configuración y el workflow de compilación. El repositorio público conserva únicamente los instaladores firmados y el manifiesto `latest.json` para que los clientes puedan actualizarse sin acceso al código fuente.
+
+### Flujo de publicación
+
+1. Actualiza la versión en `package.json`, `app.js`, `version.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
+2. Genera una build firmada desde el repositorio privado con `npm run tauri:build`.
+3. Crea un GitHub Release en `CriissH/s-getion` con el tag correspondiente, por ejemplo `v1.0.2`.
+4. Adjunta el instalador NSIS, su archivo `.sig`, el MSI, su `.sig` y `latest.json`.
+5. Publica el Release. Al iniciar, los clientes consultarán ese manifiesto y mostrarán la actualización una sola vez.
+
+Si el usuario selecciona **Ahora no**, la versión queda descartada para el aviso automático de inicio. Puede revisarla manualmente desde **Configuración → Buscar actualización**. Si acepta, debe crear el backup Excel antes de que se habilite la instalación.
+
 ## Generar el instalador Tauri
 
 Requisitos: Node.js 20+, Rust estable y las herramientas de compilación de Windows.
