@@ -432,7 +432,7 @@ function importBackup(file) {
       if (!encoded) throw new Error("Formato no reconocido");
       const imported = JSON.parse(decodeURIComponent(escape(atob(encoded))));
       if (!Array.isArray(imported.categories) || !Array.isArray(imported.expenses)) throw new Error("Datos inválidos");
-      state = { ...defaultState, ...imported }; saveState(); render(); showToast("Datos restaurados correctamente");
+      state = { ...defaultState, ...imported, onboardingComplete: true }; saveState(); closeModal("welcome-modal"); render(); showToast("Datos restaurados correctamente");
     } catch { showToast("No se pudo leer el respaldo. Usa un archivo exportado desde Saldo.", true); }
   };
   reader.readAsText(file);
