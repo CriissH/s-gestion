@@ -1,5 +1,5 @@
 const STORAGE_KEY = "saldo-expenses-v1";
-const APP_VERSION = "1.0.6b";
+const APP_VERSION = "1.0.7";
 const palette = ["#177b55", "#ed9c54", "#8b7ee7", "#5c9ee8", "#d95f59", "#51a68b", "#c77bcb", "#a1a85d"];
 const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉", "🚗", "🚌", "🚲", "🏥", "💡", "🎁", "🛒", "🐾"];
 const defaultCategories = [
