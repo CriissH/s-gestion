@@ -325,6 +325,12 @@ function calculateCollectiveSettlements(event = collectiveDraft()) {
   });
   return { total, share, balances, transfers };
 }
+function groupCollectiveTransfers(transfers) {
+  return transfers.reduce((groups, transfer) => {
+    (groups[transfer.from] ||= []).push(transfer);
+    return groups;
+  }, {});
+}
 function renderCollective() {
   const event = collectiveDraft();
   const peopleInput = document.getElementById("collective-people");
@@ -341,8 +347,9 @@ function renderCollective() {
   const result = calculateCollectiveSettlements(event);
   document.getElementById("collective-total").textContent = money(result.total);
   document.getElementById("collective-share").textContent = money(result.share);
+  const groupedTransfers = groupCollectiveTransfers(result.transfers);
   document.getElementById("collective-settlements").innerHTML = result.transfers.length
-    ? result.transfers.map(item => `<div class="collective-transfer"><span>${escapeHtml(item.from)}</span><strong>paga a</strong><span>${escapeHtml(item.to)}</span><b>${money(item.amount)}</b></div>`).join("")
+    ? Object.entries(groupedTransfers).map(([from, transfers]) => `<div class="collective-payer-group"><h3>${escapeHtml(from)} debe transferir</h3>${transfers.map(item => `<div class="collective-transfer"><span>A <strong>${escapeHtml(item.to)}</strong></span><b>${money(item.amount)}</b></div>`).join("")}<div class="collective-payer-total">Total de ${escapeHtml(from)}: <strong>${money(transfers.reduce((sum, item) => sum + item.amount, 0))}</strong></div></div>`).join("")
     : `<div class="empty-state compact">${event.people.length > 1 && event.expenses.length ? "Todos quedan equilibrados." : "Agrega personas y compras para calcular las transferencias."}</div>`;
   document.getElementById("collective-balances").innerHTML = result.balances.map(person => `<div class="collective-balance"><span>${escapeHtml(person.name)}</span><span>Pagó ${money(person.paid)}</span><b class="${person.balance >= 0 ? "savings-positive" : "savings-negative"}">${person.balance >= 0 ? "+" : "−"}${money(Math.abs(person.balance))}</b></div>`).join("");
 }
@@ -350,10 +357,18 @@ function saveCollectiveDraft() { state.collectiveDraft = collectiveDraft(); save
 function printCollectiveReceipt() {
   const event = collectiveDraft(), result = calculateCollectiveSettlements(event);
   if (!event.people.length || !event.expenses.length) return showToast("Agrega personas y compras antes de generar el comprobante.", true);
-  const popup = window.open("", "_blank");
-  if (!popup) return showToast("Permite las ventanas emergentes para generar el comprobante.", true);
-  popup.document.write(`<html><head><title>Comprobante - ${escapeHtml(event.name || "Compra colectiva")}</title><style>body{font-family:Arial;padding:32px;color:#222}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border:1px solid #ccc;padding:8px;text-align:left}h1{color:#177b55}</style></head><body><h1>${escapeHtml(event.name || "Compra colectiva")}</h1><p>Total: <strong>${money(result.total)}</strong> · Parte por persona: <strong>${money(result.share)}</strong></p><h2>Transferencias</h2>${result.transfers.length ? `<table><tr><th>Quién paga</th><th>A quién</th><th>Importe</th></tr>${result.transfers.map(item => `<tr><td>${escapeHtml(item.from)}</td><td>${escapeHtml(item.to)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table>` : "<p>No hay transferencias pendientes.</p>"}<h2>Compras</h2><table><tr><th>Persona</th><th>Razón</th><th>Importe</th></tr>${event.expenses.map(item => `<tr><td>${escapeHtml(event.people.find(person => person.id === item.payerId)?.name || "")}</td><td>${escapeHtml(item.reason)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table><script>window.print()</script></body></html>`);
-  popup.document.close();
+  const groupedTransfers = groupCollectiveTransfers(result.transfers);
+  const transferSections = Object.entries(groupedTransfers).map(([from, transfers]) => `<section><h3>${escapeHtml(from)} debe transferir</h3><table><tr><th>A quién</th><th>Importe</th></tr>${transfers.map(item => `<tr><td>${escapeHtml(item.to)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table><p><strong>Total de ${escapeHtml(from)}: ${money(transfers.reduce((sum, item) => sum + item.amount, 0))}</strong></p></section>`).join("");
+  const html = `<html><head><meta charset="UTF-8"><title>Comprobante - ${escapeHtml(event.name || "Compra colectiva")}</title><style>body{font-family:Arial;padding:32px;color:#222}table{border-collapse:collapse;width:100%;margin:10px 0 8px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#e7f1ec}h1{color:#177b55}h2{margin-top:28px}h3{margin-bottom:6px}</style></head><body><h1>${escapeHtml(event.name || "Compra colectiva")}</h1><p>Total: <strong>${money(result.total)}</strong> · Parte por persona: <strong>${money(result.share)}</strong></p><h2>Transferencias por persona</h2>${transferSections || "<p>No hay transferencias pendientes.</p>"}<h2>Compras registradas</h2><table><tr><th>Persona</th><th>Razón</th><th>Importe</th></tr>${event.expenses.map(item => `<tr><td>${escapeHtml(event.people.find(person => person.id === item.payerId)?.name || "")}</td><td>${escapeHtml(item.reason)}</td><td>${money(item.amount)}</td></tr>`).join("")}</table></body></html>`;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${(event.name || "compra-colectiva").replace(/[^\wáéíóúñü -]/gi, "").trim().replace(/\s+/g, "-") || "compra-colectiva"}-comprobante.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  showToast("Comprobante descargado correctamente.");
 }
 function resetCollective() {
   state.collectiveEvents = state.collectiveEvents || [];
