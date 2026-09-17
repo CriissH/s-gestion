@@ -31,6 +31,7 @@ const defaultState = {
   savingsBalance: 0,
   savingsHistory: [],
   savingsMovements: [],
+  savingsGoals: [],
   collectiveEvents: [],
   collectiveDraft: { name: "", people: [], expenses: [] },
   categories: structuredClone(defaultCategories),
@@ -80,7 +81,8 @@ function loadState() {
         : item);
     const categories = [...(saved.categories || [])];
     defaultCategories.forEach(category => { if (!categories.some(item => item.id === category.id)) categories.push({ ...category }); });
-    return { ...defaultState, ...saved, backupVersion: 2, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, recurringHistory: saved.recurringHistory || [], expenseHistory: saved.expenseHistory || [], incomeNotice: saved.incomeNotice || "", darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [], collectiveEvents: saved.collectiveEvents || [], collectiveDraft: saved.collectiveDraft && Array.isArray(saved.collectiveDraft.people) && Array.isArray(saved.collectiveDraft.expenses) ? saved.collectiveDraft : structuredClone(defaultState.collectiveDraft) };
+    expenses.forEach(item => { if (item.recurring && !item.recurringType) item.recurringType = "expense"; });
+    return { ...defaultState, ...saved, backupVersion: 2, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, recurringHistory: saved.recurringHistory || [], expenseHistory: saved.expenseHistory || [], incomeNotice: saved.incomeNotice || "", darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [], savingsGoals: saved.savingsGoals || [], collectiveEvents: saved.collectiveEvents || [], collectiveDraft: saved.collectiveDraft && Array.isArray(saved.collectiveDraft.people) && Array.isArray(saved.collectiveDraft.expenses) ? saved.collectiveDraft : structuredClone(defaultState.collectiveDraft) };
   } catch {
     return structuredClone(defaultState);
   }
@@ -107,7 +109,26 @@ function getExpenseEditReason() {
   return selected === "Otro" ? document.getElementById("expense-edit-custom-reason").value.trim() : selected;
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-function currentIncome() { return state.currentCycleIncome == null ? Number(state.income || 0) : Number(state.currentCycleIncome); }
+function baseIncome() { return state.currentCycleIncome == null ? Number(state.income || 0) : Number(state.currentCycleIncome); }
+function recurringIncomeTemplates() { return state.expenses.filter(item => item.recurring && item.recurringType === "income"); }
+function recurringOccurrenceDates(template, start, end) {
+  const dates = [];
+  for (const date = new Date(start.getTime()); date <= end; date.setDate(date.getDate() + 1)) {
+    const matches = template.frequency === "daily"
+      || (template.frequency === "weekly" && Number(template.weekday) === date.getDay())
+      || (template.frequency === "monthly" && Math.min(Number(template.monthlyDay || 1), daysInMonth(date.getFullYear(), date.getMonth())) === date.getDate());
+    if (matches) dates.push(new Date(date.getTime()));
+  }
+  return dates;
+}
+function confirmedRecurringIncomeTotal(until = effectiveDate()) {
+  const start = getCycleStart();
+  return recurringIncomeTemplates().reduce((total, template) => recurringOccurrenceDates(template, start, until).reduce((sum, date) => {
+    const key = recurringConfirmationKey(template, date);
+    return sum + (state.recurringConfirmations[key] === "yes" ? Number(template.amount || 0) : 0);
+  }, total), 0);
+}
+function currentIncome() { return baseIncome() + confirmedRecurringIncomeTotal(); }
 function getCycleStart() {
   const now = effectiveDate();
   let year = now.getFullYear(), month = now.getMonth();
@@ -161,7 +182,10 @@ function recurringTemplatesForToday() {
 function confirmationKey(template) { return `${template.id}_${todayKey()}`; }
 function pendingRecurring() {
   const confirmations = state.recurringConfirmations || {};
-  return recurringTemplatesForToday().filter(template => !confirmations[confirmationKey(template)]);
+  return recurringTemplatesForToday().filter(template => {
+    const key = recurringConfirmationKey(template, effectiveDate());
+    return !confirmations[key];
+  });
 }
 function getCategory(id) { return state.categories.find(category => category.id === id) || { name: "Sin categoría", color: "#aab2ad", icon: "•" }; }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char])); }
@@ -224,9 +248,48 @@ async function checkForUpdate(showNoUpdate = false, ignoreDismissed = false) {
     }
   }
 }
+function recurringConfirmationKey(template, referenceDate = new Date()) {
+  if (template.frequency === "monthly") {
+    const year = referenceDate.getFullYear();
+    const month = String(referenceDate.getMonth() + 1).padStart(2, "0");
+    return `${template.id}_${year}-${month}`;
+  }
+  return `${template.id}_${cycleDateKey(referenceDate)}`;
+}
+function monthlyRecurringTemplates() {
+  return state.expenses.filter(item => item.recurring && item.recurringType !== "income" && item.frequency === "monthly");
+}
+function monthlyRecurringIncomeTotal() {
+  return recurringIncomeTemplates().filter(item => item.frequency === "monthly").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+function monthlyRecurringTotal() {
+  return monthlyRecurringTemplates().reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+function pendingMonthlyRecurring() {
+  const now = effectiveDate();
+  return monthlyRecurringTemplates().filter(template => {
+    const monthlyDay = Number(template.monthlyDay || 1);
+    const dueDate = new Date(now.getFullYear(), now.getMonth(), monthlyDay);
+    const isAfterDueDate = now >= dueDate;
+    const status = state.recurringConfirmations[recurringConfirmationKey(template, now)];
+    return isAfterDueDate && status !== "yes" && status !== "no";
+  });
+}
+function monthlyProjectionValue() {
+  const currentSpent = confirmedExpenses().reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const totalRecurring = monthlyRecurringTotal();
+  const confirmedMonthlyIncome = confirmedRecurringIncomeTotal();
+  return currentIncome() - currentSpent - totalRecurring + monthlyRecurringIncomeTotal() - confirmedMonthlyIncome;
+}
 function renderDashboard() {
   const expenses = confirmedExpenses(), spent = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
   const remaining = currentIncome() - spent, budget = currentIncome();
+  const projectionAmount = monthlyProjectionValue();
+  const recurringIncome = monthlyRecurringIncomeTotal();
+  const projectionCaption = monthlyRecurringTotal() || recurringIncome
+    ? `Quedaría ${money(projectionAmount)} con ${money(monthlyRecurringTotal())} en gastos recurrentes.`
+    : "Sin gastos recurrentes mensuales.";
+  const projectionIncomeCaption = recurringIncome ? ` Si validas los ingresos recurrentes, sumaría ${money(recurringIncome)}.` : "";
   document.getElementById("remaining-amount").textContent = money(remaining);
   document.getElementById("remaining-caption").textContent = budget ? (remaining >= 0 ? "Disponible para el resto del ciclo" : "Has superado tu presupuesto") : "Configura tu ingreso mensual para comenzar";
   const notice = document.getElementById("income-notice");
@@ -241,6 +304,8 @@ function renderDashboard() {
   document.getElementById("spent-stat").textContent = money(spent);
   document.getElementById("average-stat").textContent = money(expenses.length ? spent / expenses.length : 0);
   document.getElementById("count-stat").textContent = expenses.length;
+  document.getElementById("monthly-projection-amount").textContent = money(projectionAmount);
+  document.getElementById("monthly-projection-caption").textContent = `${projectionCaption}${projectionIncomeCaption}`;
 
   const grouped = groupByCategory(expenses), groups = Object.entries(grouped).filter(([, value]) => value > 0);
   const total = groups.reduce((sum, [, value]) => sum + value, 0);
@@ -259,16 +324,44 @@ function renderDashboard() {
 }
 function renderRecurringConfirmation() {
   const pending = pendingRecurring();
+  const monthlyPending = pendingMonthlyRecurring();
   const banner = document.getElementById("pending-banner");
   const bar = document.getElementById("recurring-bar");
-  banner.hidden = pending.length === 0;
-  bar.hidden = pending.length === 0;
+  const deferred = Object.values(state.recurringConfirmations || {}).some(value => value === "deferred");
+  const hasWarning = pending.length > 0 || monthlyPending.length > 0 || deferred;
+  banner.hidden = !hasWarning;
+  bar.hidden = pending.length === 0 && monthlyPending.length === 0;
+  const title = monthlyPending.length ? "HAY GASTOS RECURRENTES MENSUALES SIN CONFIRMAR" : "TIENES GASTOS SIN CONFIRMAR";
+  const copy = monthlyPending.length ? "Revisa los gastos recurrentes mensuales que ya pasaron la fecha de confirmación." : "Hay recurrentes desplazados o sin confirmar. Confírmalos cuando corresponda.";
+  document.getElementById("pending-banner-title").textContent = title;
+  document.getElementById("pending-banner-copy").textContent = copy;
   document.getElementById("recurring-date-label").textContent = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long" }).format(todayDate());
-  document.getElementById("recurring-items").innerHTML = pending.map(template => {
+  const allPending = [...pending, ...monthlyPending].filter((item, index, array) => array.findIndex(candidate => candidate.id === item.id) === index);
+  document.getElementById("recurring-items").innerHTML = allPending.map(template => {
     const category = getCategory(template.categoryId);
     const frequency = template.frequency === "daily" ? "Diario" : template.frequency === "weekly" ? "Semanal" : "Mensual";
-    return `<div class="recurring-item"><div class="recurring-item-icon" style="background:${category.color}20;color:${category.color}">${category.icon}</div><div class="recurring-item-info"><strong>${escapeHtml(template.description)}</strong><span>${escapeHtml(category.name)} · ${frequency}</span></div><b>${money(template.amount)}</b><button class="confirm-button yes" data-confirm-recurring="${template.id}" title="Sí, lo gasté">✓</button><button class="confirm-button no" data-reject-recurring="${template.id}" title="No lo gasté">×</button></div>`;
+    const isIncome = template.recurringType === "income";
+    return `<div class="recurring-item"><div class="recurring-item-icon" style="background:${category.color}20;color:${category.color}">${isIncome ? "↗" : category.icon}</div><div class="recurring-item-info"><strong>${escapeHtml(template.description)}</strong><span>${isIncome ? "Ingreso" : escapeHtml(category.name)} · ${frequency}</span></div><b>${money(template.amount)}</b><button class="confirm-button yes" data-confirm-recurring="${template.id}" title="Validar">✓</button><button class="confirm-button no" data-reject-recurring="${template.id}" title="Rechazar">×</button><button class="confirm-button defer" data-defer-recurring="${template.id}" title="Desplazar / dejar pendiente">…</button></div>`;
   }).join("");
+}
+function getRecurringStatusLabel(template) {
+  const key = recurringConfirmationKey(template, effectiveDate());
+  if (state.recurringConfirmations[key] === "yes") return { label: "Confirmado", className: "recurring-status confirmed" };
+  if (state.recurringConfirmations[key] === "no") return { label: "Rechazado", className: "recurring-status rejected" };
+  if (state.recurringConfirmations[key] === "deferred") return { label: "Pendiente", className: "recurring-status pending" };
+  if (template.frequency !== "monthly") {
+    const confirmationKey = recurringConfirmationKey(template, effectiveDate());
+    if (pendingRecurring().some(item => item.id === template.id)) return { label: "Esperando", className: "recurring-status pending" };
+    return { label: "Sin confirmar", className: "recurring-status pending" };
+  }
+
+  const now = effectiveDate();
+  const monthlyDay = Number(template.monthlyDay || 1);
+  const dueDate = new Date(now.getFullYear(), now.getMonth(), monthlyDay);
+  const confirmed = Boolean(state.recurringConfirmations[key]);
+  if (confirmed) return { label: "Confirmado", className: "recurring-status confirmed" };
+  if (now >= dueDate) return { label: "Vencido", className: "recurring-status overdue" };
+  return { label: "Pendiente", className: "recurring-status pending" };
 }
 function renderAllRecurring() {
   const templates = state.expenses.filter(item => item.recurring);
@@ -276,7 +369,9 @@ function renderAllRecurring() {
   document.getElementById("recurring-all-list").innerHTML = templates.map(template => {
     const category = getCategory(template.categoryId);
     const frequency = template.frequency === "daily" ? "Diario" : template.frequency === "monthly" ? `Mensual · día ${template.monthlyDay}` : `Semanal · ${["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][Number(template.weekday)]}`;
-    return `<div class="recurring-all-row"><div class="recurring-item-icon" style="background:${category.color}20;color:${category.color}">${category.icon}</div><div class="expense-info"><strong>${escapeHtml(template.description)}</strong><span>${escapeHtml(category.name)} · ${frequency}</span></div><b>${money(template.amount)}</b><button class="edit-button" data-edit-recurring="${template.id}" title="Modificar recurrente">✎</button><button class="delete-button" data-delete-recurring="${template.id}" title="Eliminar recurrente">×</button></div>`;
+    const status = getRecurringStatusLabel(template);
+    const isIncome = template.recurringType === "income";
+    return `<div class="recurring-all-row"><div class="recurring-item-icon" style="background:${category.color}20;color:${category.color}">${isIncome ? "↗" : category.icon}</div><div class="expense-info"><strong>${escapeHtml(template.description)}</strong><span>${isIncome ? "Ingreso recurrente" : escapeHtml(category.name)} · ${frequency}</span></div><b>${money(template.amount)}</b><span class="${status.className}">${status.label}</span><select class="recurring-state-select" data-recurring-state="${template.id}" aria-label="Cambiar estado"><option value="">Cambiar estado</option><option value="no">Rechazado</option><option value="deferred">Pendiente</option><option value="yes">Aprobado</option></select><button class="edit-button" data-edit-recurring="${template.id}" title="Modificar recurrente">✎</button><button class="delete-button" data-delete-recurring="${template.id}" title="Eliminar recurrente">×</button></div>`;
   }).join("");
 }
 function renderSidebarRecurring() {
@@ -284,11 +379,41 @@ function renderSidebarRecurring() {
   document.getElementById("sidebar-recurring-count").textContent = templates.length;
   document.getElementById("sidebar-recurring-empty").hidden = templates.length > 0;
   const visible = templates.slice(0, 3);
-  document.getElementById("sidebar-recurring-more").hidden = templates.length <= 3;
+  document.getElementById("sidebar-recurring-more").hidden = false;
   document.getElementById("sidebar-recurring-list").innerHTML = visible.map(template => {
     const category = getCategory(template.categoryId);
     const frequency = template.frequency === "daily" ? "Diario" : template.frequency === "monthly" ? `Mensual · día ${template.monthlyDay}` : `Cada ${["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][Number(template.weekday)] || "semana"}`;
     return `<div class="sidebar-recurring-item"><button class="sidebar-recurring-main" data-edit-recurring="${template.id}"><span class="sidebar-recurring-dot" style="background:${category.color}"></span><span class="sidebar-recurring-info"><strong>${escapeHtml(template.description)}</strong><small>${frequency} · ${money(template.amount)}</small></span><span class="sidebar-edit-icon">✎</span></button><button class="sidebar-recurring-delete" data-delete-recurring="${template.id}" title="Eliminar recurrente" aria-label="Eliminar recurrente">×</button></div>`;
+  }).join("");
+}
+function calculateGoalRecommendation(goal) {
+  const available = Math.max(0, monthlyProjectionValue());
+  const safeLimit = Math.max(0, Math.floor((currentIncome() - confirmedExpenses().reduce((sum, item) => sum + Number(item.amount || 0), 0)) * 0.3));
+  const monthsToTarget = goal.targetDate ? Math.max(1, Math.ceil((new Date(`${goal.targetDate}T12:00:00`).getTime() - effectiveDate().getTime()) / (1000 * 60 * 60 * 24 * 30.4375))) : 6;
+  const requiredMonthly = Math.ceil(Number(goal.targetAmount || 0) / monthsToTarget);
+  const suggestedMonthly = Math.min(requiredMonthly, available || requiredMonthly);
+  return {
+    available,
+    monthsToTarget,
+    requiredMonthly,
+    suggestedMonthly: Math.min(suggestedMonthly, safeLimit),
+    safeLimit,
+    goalCauses: available > 0 ? `${money(Math.min(suggestedMonthly, safeLimit))} por mes durante ${monthsToTarget} meses` : `${money(requiredMonthly)} por mes durante ${monthsToTarget} meses`,
+    status: available > 0 ? "factible" : "revisar"
+  };
+}
+function renderSavingsGoals() {
+  const goals = state.savingsGoals || [];
+  const list = document.getElementById("savings-goals-list");
+  if (!list) return;
+  if (!goals.length) {
+    list.innerHTML = '<div class="empty-state compact">Aún no creaste metas de ahorro. Define tu primer objetivo.</div>';
+    return;
+  }
+  list.innerHTML = goals.map(goal => {
+    const recommendation = calculateGoalRecommendation(goal);
+    const progress = Math.min(100, Math.round((state.savingsBalance / Number(goal.targetAmount || 1)) * 100));
+    return `<div class="savings-goal-card"><div class="savings-goal-header"><div><h3>${escapeHtml(goal.name)}</h3><span>Objetivo ${money(goal.targetAmount)}</span></div><button class="delete-button" data-delete-savings-goal="${goal.id}" title="Eliminar meta">×</button></div><div class="savings-goal-progress"><span style="width:${progress}%"></span></div><div class="savings-goal-meta"><strong>${recommendation.goalCauses}</strong><span>${recommendation.available > 0 ? `Tienes ${money(recommendation.available)} de proyección mensual disponible.` : "Tu proyección mensual actual no alcanza este objetivo con el presupuesto actual."}</span></div></div>`;
   }).join("");
 }
 function renderSavings() {
@@ -299,6 +424,7 @@ function renderSavings() {
   document.getElementById("savings-cycle-count").textContent = history.length;
   document.getElementById("savings-empty").style.display = history.length || movements.length ? "none" : "block";
   document.getElementById("savings-history").innerHTML = history.map(item => `<div class="income-history-row savings-history-row"><div><strong>${dateFormat(item.start)} – ${dateFormat(item.end)}</strong><span>Ingreso ${money(item.income)} · Gastado ${money(item.spent)}</span></div><b>+${money(item.transferred)}</b></div>`).join("") + movements.map(item => `<div class="income-history-row savings-history-row"><div><strong>${item.type === "deposit" ? "Ingreso de ahorro" : "Extracción de ahorro"}</strong><span>${dateFormat(item.date)} · ${escapeHtml(item.reason)}</span></div><b class="${item.type === "deposit" ? "savings-positive" : "savings-negative"}">${item.type === "deposit" ? "+" : "−"}${money(item.amount)}</b></div>`).join("");
+  renderSavingsGoals();
 }
 function collectiveDraft() {
   if (!state.collectiveDraft || !Array.isArray(state.collectiveDraft.people) || !Array.isArray(state.collectiveDraft.expenses)) state.collectiveDraft = structuredClone(defaultState.collectiveDraft);
@@ -378,15 +504,16 @@ function resetCollective() {
   renderCollective();
   showToast("Pestaña de compra colectiva reiniciada.");
 }
-function confirmRecurring(templateId, spent) {
+function confirmRecurring(templateId, status) {
   const template = state.expenses.find(item => item.id === templateId);
   if (!template) return;
   if (!state.recurringConfirmations) state.recurringConfirmations = {};
-  state.recurringConfirmations[confirmationKey(template)] = spent ? "yes" : "no";
-  if (spent) state.expenses.push({ id: crypto.randomUUID(), description: template.description, amount: Number(template.amount), categoryId: template.categoryId, date: todayKey(), recurring: false, recurringSourceId: template.id });
+  const key = recurringConfirmationKey(template, effectiveDate());
+  state.recurringConfirmations[key] = status;
+  if (status === "yes" && template.recurringType !== "income") state.expenses.push({ id: crypto.randomUUID(), description: template.description, amount: Number(template.amount), categoryId: template.categoryId, date: todayKey(), recurring: false, recurringSourceId: template.id });
   saveState();
   render();
-  showToast(spent ? "Gasto confirmado y descontado." : "Gasto marcado como no realizado.");
+  showToast(status === "yes" ? (template.recurringType === "income" ? "Ingreso recurrente validado." : "Gasto confirmado y descontado.") : status === "no" ? "Pago marcado como rechazado." : "Pago desplazado: quedará pendiente.");
 }
 function updateRecurringEditHelp() {
   const scope = document.getElementById("recurring-edit-scope").value;
@@ -449,6 +576,7 @@ function renderStatistics() {
 function renderReports() {
   const expenses = confirmedExpenses(), spent = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
   document.getElementById("report-summary").innerHTML = `<div class="summary-grid"><div class="summary-box"><span>Ingreso mensual</span><strong>${money(currentIncome())}</strong></div><div class="summary-box"><span>Gastos del ciclo</span><strong>${money(spent)}</strong></div><div class="summary-box"><span>Presupuesto restante</span><strong>${money(currentIncome() - spent)}</strong></div></div>`;
+  renderPaymentAdvice();
   const history = [...state.incomeHistory].reverse();
   document.getElementById("income-history").innerHTML = history.length ? history.map(item => `<div class="income-history-row"><div><strong>${escapeHtml(item.reason)}</strong><span>${dateFormat(item.date)} · ${item.type === "next" ? "Próximo ciclo" : item.type === "addition" ? "Adición al monto actual" : item.type === "next-applied" ? "Aplicado al iniciar ciclo" : "Monto actual"}</span></div><b>${item.type === "addition" ? "+" : ""}${money(item.amount)}</b></div>`).join("") : `<div class="empty-state compact">Todavía no hay modificaciones de ingreso.</div>`;
   const recurringHistory = [...(state.recurringHistory || [])].reverse();
@@ -458,6 +586,38 @@ function renderReports() {
   }).join("") : `<div class="empty-state compact">Todavía no hay cambios de gastos recurrentes.</div>`;
   const expenseHistory = [...(state.expenseHistory || [])].reverse();
   document.getElementById("expense-history").innerHTML = expenseHistory.length ? expenseHistory.map(item => `<div class="income-history-row modification-row"><div><strong>MODIFICADO · ${escapeHtml(item.description)}</strong><span>${dateFormat(item.date)} · ${escapeHtml(item.reason)}</span></div><b>${money(item.previousAmount)} → ${money(item.amount)}</b></div>`).join("") : `<div class="empty-state compact">Todavía no hay gastos corregidos.</div>`;
+}
+function renderPaymentAdvice() {
+  const container = document.getElementById("payment-advice");
+  if (!container) return;
+  const remaining = currentIncome() - confirmedExpenses().reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const scheduledIncome = recurringIncomeTemplates().reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const expenses = state.expenses.filter(item => item.recurring && item.recurringType !== "income").map(template => {
+    const due = nextRecurringDate(template);
+    const status = getRecurringStatusLabel(template);
+    return { template, due, status };
+  }).sort((a, b) => a.due - b.due);
+  if (!expenses.length) {
+    container.innerHTML = '<div class="empty-state compact">No hay pagos recurrentes para priorizar.</div>';
+    return;
+  }
+  container.innerHTML = `<div class="payment-advice-summary">Disponible ahora: <strong>${money(remaining)}</strong>${scheduledIncome ? ` · Otros ingresos programados: <strong>${money(scheduledIncome)}</strong>` : ""} · Proyección: <strong>${money(monthlyProjectionValue())}</strong></div>${expenses.map(({ template, due, status }) => {
+    const amount = Number(template.amount || 0);
+    const canPay = remaining >= amount;
+    const urgency = due <= effectiveDate() ? "Vencido o vence hoy" : `Vence el ${dateFormat(cycleDateKey(due))}`;
+    return `<div class="payment-advice-row"><div><strong>${escapeHtml(template.description)}</strong><span>${urgency} · ${status.label}</span></div><b>${money(amount)}</b><em class="${canPay ? "advice-ok" : "advice-wait"}">${canPay ? "Conviene abonar" : "Esperar ingreso"}</em></div>`;
+  }).join("")}`;
+}
+function nextRecurringDate(template) {
+  const start = new Date(effectiveDate().getFullYear(), effectiveDate().getMonth(), effectiveDate().getDate());
+  for (let offset = 0; offset <= 370; offset += 1) {
+    const candidate = new Date(start.getTime());
+    candidate.setDate(start.getDate() + offset);
+    if ((template.frequency === "daily")
+      || (template.frequency === "weekly" && candidate.getDay() === Number(template.weekday))
+      || (template.frequency === "monthly" && candidate.getDate() === Math.min(Number(template.monthlyDay || 1), daysInMonth(candidate.getFullYear(), candidate.getMonth())))) return candidate;
+  }
+  return start;
 }
 function incomeHistoryMarkup() {
   const history = [...state.incomeHistory].reverse();
@@ -504,10 +664,20 @@ function updateIncomeForm() {
   const action = document.getElementById("income-action").value;
   const cutoffLabel = document.getElementById("income-cutoff-label");
   const amountLabel = document.getElementById("income-amount-label");
+  const recurringOptions = document.getElementById("income-recurring-options");
   document.getElementById("income-change-amount").value = "";
   document.getElementById("income-change-cutoff").value = state.cutoffDay;
-  cutoffLabel.hidden = action !== "next";
-  amountLabel.firstChild.textContent = action === "addition" ? "Monto a sumar" : action === "current" ? "Nuevo monto actual" : "Nuevo monto mensual";
+  const recurring = action === "recurring";
+  cutoffLabel.hidden = recurring || action !== "next";
+  document.getElementById("income-change-cutoff").required = action === "next";
+  amountLabel.firstChild.textContent = action === "addition" ? "Monto a sumar" : action === "current" ? "Nuevo monto actual" : recurring ? "Importe del ingreso recurrente" : "Nuevo monto mensual";
+  recurringOptions.hidden = !recurring;
+  document.getElementById("income-reason-label").hidden = recurring;
+  document.getElementById("income-reason").required = !recurring;
+  document.getElementById("income-custom-reason-label").hidden = recurring || document.getElementById("income-reason").value !== "Otro";
+  document.getElementById("income-custom-reason").required = !recurring && document.getElementById("income-reason").value === "Otro";
+  document.getElementById("income-recurring-weekday-label").hidden = !recurring || document.getElementById("income-recurring-frequency").value !== "weekly";
+  document.getElementById("income-recurring-monthly-label").hidden = !recurring || document.getElementById("income-recurring-frequency").value !== "monthly";
 }
 function openModal(id) { document.getElementById(id).hidden = false; }
 function closeModal(id) { document.getElementById(id).hidden = true; }
@@ -580,7 +750,7 @@ document.addEventListener("click", event => {
   if (link) navigate(link.dataset.viewLink);
   const close = event.target.closest("[data-close-modal]");
   if (close) closeModal(close.dataset.closeModal);
-  if (event.target.id === "new-expense-button" || event.target.id === "new-expense-button-2") { populateCategorySelect(); document.getElementById("date-input").value = todayISO(); document.getElementById("recurring-monthly-day").value = ""; document.getElementById("recurring-options").hidden = true; document.getElementById("recurring-weekday-label").hidden = true; document.getElementById("recurring-monthly-date-label").hidden = true; document.getElementById("date-input").required = true; openModal("expense-modal"); }
+  if (event.target.id === "new-expense-button" || event.target.id === "new-expense-button-2") { populateCategorySelect(); document.getElementById("expense-modal-title").textContent = "Registrar gasto"; document.getElementById("recurring-input").checked = false; document.getElementById("date-input").value = todayISO(); document.getElementById("recurring-monthly-day").value = ""; document.getElementById("recurring-options").hidden = true; document.getElementById("recurring-weekday-label").hidden = true; document.getElementById("recurring-monthly-date-label").hidden = true; document.getElementById("date-input").required = true; openModal("expense-modal"); }
   if (event.target.id === "income-button") { updateIncomeForm(); openModal("income-modal"); }
   const editRecurring = event.target.closest("[data-edit-recurring]");
   if (editRecurring) openRecurringEditor(editRecurring.dataset.editRecurring);
@@ -590,9 +760,15 @@ document.addEventListener("click", event => {
   if (editExpense) openExpenseEditor(editExpense.dataset.editExpense);
   if (event.target.id === "pending-banner-button") document.getElementById("recurring-bar").scrollIntoView({ behavior: "smooth", block: "end" });
   const confirmButton = event.target.closest("[data-confirm-recurring]");
-  if (confirmButton) confirmRecurring(confirmButton.dataset.confirmRecurring, true);
+  if (confirmButton) confirmRecurring(confirmButton.dataset.confirmRecurring, "yes");
   const rejectButton = event.target.closest("[data-reject-recurring]");
-  if (rejectButton) confirmRecurring(rejectButton.dataset.rejectRecurring, false);
+  if (rejectButton) confirmRecurring(rejectButton.dataset.rejectRecurring, "no");
+  const deferButton = event.target.closest("[data-defer-recurring]");
+  if (deferButton) confirmRecurring(deferButton.dataset.deferRecurring, "deferred");
+  const recurringState = event.target.closest("[data-recurring-state]");
+  if (recurringState && recurringState.value) {
+    confirmRecurring(recurringState.dataset.recurringState, recurringState.value);
+  }
   if (event.target.id === "open-welcome-button") { document.getElementById("welcome-modal").hidden = false; setTimeout(() => document.getElementById("welcome-income-input").focus(), 0); }
   if (event.target.id === "new-category-button") openCategoryEditor();
   const editCategory = event.target.closest("[data-edit-category]");
@@ -621,6 +797,13 @@ document.addEventListener("click", event => {
     if (hasExpenses) return showToast("No puedes eliminar una categoría con gastos asociados.", true);
     state.categories = state.categories.filter(item => item.id !== deleteCategory.dataset.deleteCategory); saveState(); render(); showToast("Categoría eliminada");
   }
+  const deleteSavingsGoal = event.target.closest("[data-delete-savings-goal]");
+  if (deleteSavingsGoal) {
+    state.savingsGoals = (state.savingsGoals || []).filter(item => item.id !== deleteSavingsGoal.dataset.deleteSavingsGoal);
+    saveState();
+    render();
+    showToast("Meta de ahorro eliminada.");
+  }
 });
 document.getElementById("expense-form").addEventListener("submit", event => {
   event.preventDefault();
@@ -634,7 +817,7 @@ document.getElementById("expense-form").addEventListener("submit", event => {
     const entered = new Date(`${expenseDateValue}T12:00:00`);
     if (!expenseDateValue || entered < getCycleStart() || entered > getCycleEnd()) return showToast(`La fecha debe estar dentro del ciclo actual: ${dateFormat(cycleDateKey(getCycleStart()))} al ${dateFormat(cycleDateKey(getCycleEnd()))}.`, true);
   }
-  state.expenses.push({ id: crypto.randomUUID(), description: document.getElementById("description-input").value.trim(), amount: Number(document.getElementById("amount-input").value), categoryId: document.getElementById("category-input").value, date: expenseDate, recurring, frequency, weekday: frequency === "weekly" ? Number(document.getElementById("recurring-weekday").value) : null, monthlyDay });
+  state.expenses.push({ id: crypto.randomUUID(), description: document.getElementById("description-input").value.trim(), amount: Number(document.getElementById("amount-input").value), categoryId: document.getElementById("category-input").value, date: expenseDate, recurring, recurringType: recurring ? "expense" : null, frequency, weekday: frequency === "weekly" ? Number(document.getElementById("recurring-weekday").value) : null, monthlyDay });
   saveState(); event.target.reset(); closeModal("expense-modal"); render(); showToast("Gasto guardado correctamente");
 });
 document.getElementById("category-form").addEventListener("submit", event => {
@@ -782,8 +965,30 @@ function openSavingsModal(action) {
   document.getElementById("savings-date-today").checked = true;
   openModal("savings-modal");
 }
+function updateSavingsGoalSuggestion() {
+  const target = Number(document.getElementById("savings-goal-target")?.value || 0);
+  if (!target) {
+    document.getElementById("savings-goal-suggestion").textContent = `Tu proyección mensual disponible: ${money(monthlyProjectionValue())}`;
+    return;
+  }
+  const months = document.getElementById("savings-goal-date")?.value ? Math.max(1, Math.ceil((new Date(`${document.getElementById("savings-goal-date").value}T12:00:00`).getTime() - effectiveDate().getTime()) / (1000 * 60 * 60 * 24 * 30.4375))) : 6;
+  const required = Math.ceil(target / months);
+  const available = Math.max(0, monthlyProjectionValue());
+  const remainingBudget = Math.max(0, currentIncome() - confirmedExpenses().reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  const safeLimit = Math.floor(remainingBudget * 0.3);
+  const suggested = Math.min(required, available || required, safeLimit);
+  document.getElementById("savings-goal-suggestion").textContent = `Tu proyección mensual disponible: ${money(available)} · límite prudente (30%): ${money(safeLimit)} · sugerido: ${money(suggested)} por mes durante ${months} meses.`;
+}
 document.getElementById("deposit-savings-button").addEventListener("click", () => openSavingsModal("deposit"));
 document.getElementById("withdraw-savings-button").addEventListener("click", () => openSavingsModal("withdrawal"));
+document.getElementById("new-savings-goal-button").addEventListener("click", () => {
+  document.getElementById("savings-goal-form").reset();
+  document.getElementById("savings-goal-modal-title").textContent = "Nueva meta";
+  updateSavingsGoalSuggestion();
+  openModal("savings-goal-modal");
+});
+document.getElementById("savings-goal-target").addEventListener("input", updateSavingsGoalSuggestion);
+document.getElementById("savings-goal-date").addEventListener("change", updateSavingsGoalSuggestion);
 document.getElementById("savings-action").addEventListener("change", event => {
   document.getElementById("savings-modal-title").textContent = event.target.value === "deposit" ? "Ingresar ahorro" : "Extraer ahorro";
 });
@@ -813,13 +1018,47 @@ document.getElementById("savings-form").addEventListener("submit", event => {
   render();
   showToast(type === "deposit" ? "Ahorro ingresado correctamente." : "Ahorro extraído correctamente.");
 });
+document.getElementById("savings-goal-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const name = document.getElementById("savings-goal-name").value.trim();
+  const target = Number(document.getElementById("savings-goal-target").value);
+  const date = document.getElementById("savings-goal-date").value;
+  if (!name || !target || target <= 0) return showToast("Completa el nombre y el valor objetivo.", true);
+  state.savingsGoals = state.savingsGoals || [];
+  state.savingsGoals.push({
+    id: crypto.randomUUID(),
+    name,
+    targetAmount: target,
+    targetDate: date || null,
+    recommendedMonthly: Math.max(0, Math.min(Math.ceil(target / Math.max(1, date ? Math.max(1, Math.ceil((new Date(`${date}T12:00:00`).getTime() - effectiveDate().getTime()) / (1000 * 60 * 60 * 24 * 30.4375))) : 6)), Math.max(0, monthlyProjectionValue())))
+  });
+  saveState();
+  event.target.reset();
+  closeModal("savings-goal-modal");
+  render();
+  showToast("Meta de ahorro creada.");
+});
 document.getElementById("income-reason").addEventListener("change", event => { document.getElementById("income-custom-reason-label").hidden = event.target.value !== "Otro"; document.getElementById("income-custom-reason").required = event.target.value === "Otro"; });
+document.getElementById("income-action").addEventListener("change", updateIncomeForm);
+document.getElementById("income-recurring-frequency").addEventListener("change", updateIncomeForm);
 document.getElementById("income-form").addEventListener("submit", event => {
   event.preventDefault();
   const action = document.getElementById("income-action").value;
   const amount = Number(document.getElementById("income-change-amount").value);
   const reason = incomeReason();
-  if (!reason) return showToast("Selecciona o escribe una razón para el cambio.", true);
+  if (!amount || amount <= 0) return showToast("Indica un importe válido.", true);
+  if (action !== "recurring" && !reason) return showToast("Selecciona o escribe una razón para el cambio.", true);
+  if (action === "recurring") {
+    const frequency = document.getElementById("income-recurring-frequency").value;
+    const monthlyDay = frequency === "monthly" ? Number(document.getElementById("income-recurring-monthly-day").value) : null;
+    if (frequency === "monthly" && (!monthlyDay || monthlyDay < 1 || monthlyDay > 31)) return showToast("Indica un día de cobro entre 1 y 31.", true);
+    state.expenses.push({ id: crypto.randomUUID(), description: "Ingreso recurrente", amount, categoryId: state.categories[0].id, date: todayISO(), recurring: true, recurringType: "income", frequency, weekday: frequency === "weekly" ? Number(document.getElementById("income-recurring-weekday").value) : null, monthlyDay });
+    saveState();
+    closeModal("income-modal");
+    render();
+    showToast("Ingreso recurrente creado.");
+    return;
+  }
   const entry = { id: crypto.randomUUID(), amount, reason, date: todayISO(), cutoffDay: state.cutoffDay, type: action };
   if (action === "next") {
     entry.cutoffDay = Number(document.getElementById("income-change-cutoff").value);
