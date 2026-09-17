@@ -1,5 +1,5 @@
 const STORAGE_KEY = "saldo-expenses-v1";
-const APP_VERSION = "1.0.2";
+const APP_VERSION = "1.0.3";
 const palette = ["#177b55", "#ed9c54", "#8b7ee7", "#5c9ee8", "#d95f59", "#51a68b", "#c77bcb", "#a1a85d"];
 const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉"];
 const defaultState = {
@@ -18,6 +18,7 @@ const defaultState = {
   lastCycleStart: null,
   savingsBalance: 0,
   savingsHistory: [],
+  savingsMovements: [],
   categories: [
     { id: "food", name: "Alimentación", color: "#177b55", icon: "▣" },
     { id: "home", name: "Hogar", color: "#ed9c54", icon: "⌂" },
@@ -65,7 +66,7 @@ function loadState() {
       .map(item => item.recurring && item.frequency === "monthly" && !item.monthlyDay && typeof item.recurringDate === "string"
         ? { ...item, monthlyDay: Number(item.recurringDate.slice(8, 10)) }
         : item);
-    return { ...defaultState, ...saved, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories: saved.categories || defaultState.categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, expenseHistory: saved.expenseHistory || [], darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [] };
+    return { ...defaultState, ...saved, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories: saved.categories || defaultState.categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, expenseHistory: saved.expenseHistory || [], darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [] };
   } catch {
     return structuredClone(defaultState);
   }
@@ -155,6 +156,13 @@ function showToast(message, error = false) {
   region.innerHTML = `<div class="toast ${error ? "error" : ""}">${escapeHtml(message)}</div>`;
   setTimeout(() => { region.innerHTML = ""; }, 3000);
 }
+function formatUpdateNotes(notes) {
+  return String(notes || "Esta actualización incluye mejoras y correcciones.")
+    .replace(/^Hay una nueva actualización\.?\s*/i, "")
+    .replace(/\\n/g, "\n")
+    .replace(/`n/g, "\n")
+    .replace(/\r?\n-\s*/g, "\n• ");
+}
 function render() {
   document.body.classList.toggle("dark-mode", state.darkMode);
   closeCompletedCycles();
@@ -190,7 +198,7 @@ async function checkForUpdate(showNoUpdate = false, ignoreDismissed = false) {
       availableUpdate = remote;
       updateBackupExported = false;
       document.getElementById("update-message").textContent = `Está disponible la versión ${remote.version}.`;
-      document.getElementById("update-changes-text").textContent = remote.body || "Incluye mejoras y correcciones.";
+      document.getElementById("update-changes-text").textContent = formatUpdateNotes(remote.body);
       document.getElementById("continue-update-button").disabled = true;
       openModal("update-modal");
     } else if (showNoUpdate) showToast("Ya tienes la última versión.");
@@ -270,9 +278,11 @@ function renderSidebarRecurring() {
 function renderSavings() {
   const history = [...(state.savingsHistory || [])].reverse();
   document.getElementById("savings-total").textContent = money(state.savingsBalance);
+  document.getElementById("savings-total-stat").textContent = money(state.savingsBalance);
+  const movements = [...(state.savingsMovements || [])].reverse();
   document.getElementById("savings-cycle-count").textContent = history.length;
-  document.getElementById("savings-empty").style.display = history.length ? "none" : "block";
-  document.getElementById("savings-history").innerHTML = history.map(item => `<div class="income-history-row savings-history-row"><div><strong>${dateFormat(item.start)} – ${dateFormat(item.end)}</strong><span>Ingreso ${money(item.income)} · Gastado ${money(item.spent)}</span></div><b>+${money(item.transferred)}</b></div>`).join("");
+  document.getElementById("savings-empty").style.display = history.length || movements.length ? "none" : "block";
+  document.getElementById("savings-history").innerHTML = history.map(item => `<div class="income-history-row savings-history-row"><div><strong>${dateFormat(item.start)} – ${dateFormat(item.end)}</strong><span>Ingreso ${money(item.income)} · Gastado ${money(item.spent)}</span></div><b>+${money(item.transferred)}</b></div>`).join("") + movements.map(item => `<div class="income-history-row savings-history-row"><div><strong>${item.type === "deposit" ? "Ingreso de ahorro" : "Extracción de ahorro"}</strong><span>${dateFormat(item.date)} · ${escapeHtml(item.reason)}</span></div><b class="${item.type === "deposit" ? "savings-positive" : "savings-negative"}">${item.type === "deposit" ? "+" : "−"}${money(item.amount)}</b></div>`).join("");
 }
 function confirmRecurring(templateId, spent) {
   const template = state.expenses.find(item => item.id === templateId);
@@ -596,6 +606,44 @@ document.getElementById("recurring-edit-form").addEventListener("submit", event 
   render();
 });
 document.getElementById("income-action").addEventListener("change", updateIncomeForm);
+function openSavingsModal(action) {
+  document.getElementById("savings-action").value = action;
+  document.getElementById("savings-modal-title").textContent = action === "deposit" ? "Ingresar ahorro" : "Extraer ahorro";
+  document.getElementById("savings-date").value = systemTodayISO();
+  document.getElementById("savings-date-today").checked = true;
+  openModal("savings-modal");
+}
+document.getElementById("deposit-savings-button").addEventListener("click", () => openSavingsModal("deposit"));
+document.getElementById("withdraw-savings-button").addEventListener("click", () => openSavingsModal("withdrawal"));
+document.getElementById("savings-action").addEventListener("change", event => {
+  document.getElementById("savings-modal-title").textContent = event.target.value === "deposit" ? "Ingresar ahorro" : "Extraer ahorro";
+});
+document.getElementById("savings-date-today").addEventListener("change", event => {
+  document.getElementById("savings-date").disabled = event.target.checked;
+});
+function systemTodayISO() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+document.getElementById("savings-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const type = document.getElementById("savings-action").value;
+  const amount = Number(document.getElementById("savings-amount").value);
+  const reason = document.getElementById("savings-reason").value.trim();
+  const date = document.getElementById("savings-date-today").checked ? systemTodayISO() : document.getElementById("savings-date").value;
+  if (!amount || amount <= 0 || !reason || !date) return showToast("Completa monto, razón y fecha.", true);
+  if (type === "withdrawal" && amount > Number(state.savingsBalance || 0)) return showToast("No puedes extraer más que el ahorro disponible.", true);
+  state.savingsBalance += type === "deposit" ? amount : -amount;
+  state.savingsMovements = state.savingsMovements || [];
+  state.savingsMovements.push({ id: crypto.randomUUID(), type: type === "deposit" ? "deposit" : "withdrawal", amount, reason, date });
+  saveState();
+  event.target.reset();
+  document.getElementById("savings-date-today").checked = true;
+  document.getElementById("savings-date").value = systemTodayISO();
+  closeModal("savings-modal");
+  render();
+  showToast(type === "deposit" ? "Ahorro ingresado correctamente." : "Ahorro extraído correctamente.");
+});
 document.getElementById("income-reason").addEventListener("change", event => { document.getElementById("income-custom-reason-label").hidden = event.target.value !== "Otro"; document.getElementById("income-custom-reason").required = event.target.value === "Otro"; });
 document.getElementById("income-form").addEventListener("submit", event => {
   event.preventDefault();
