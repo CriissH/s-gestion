@@ -37,9 +37,9 @@ Los datos permanecen en el navegador y no se envían a ningún servidor.
 
 ## Distribución y actualizaciones
 
-La versión instalada consulta el manifiesto firmado `latest.json` en GitHub Releases. Al detectar una versión distinta, solicita exportar el respaldo Excel y luego descarga, verifica e instala automáticamente el nuevo instalador. Finalmente, Saldo se reinicia.
+La versión instalada consulta el manifiesto firmado `latest.json` en el repositorio público de distribución `CriissH/s-getion`. Al detectar una versión distinta, solicita exportar el respaldo Excel y luego descarga, verifica e instala automáticamente el nuevo instalador. Finalmente, Saldo se reinicia. El código fuente y el workflow de compilación se mantienen en el repositorio privado `CriissH/s-getion-app`.
 
-Para publicar una actualización, crea un Release de GitHub con un tag `vX.Y.Z` y adjunta los artefactos firmados generados por el workflow. La clave privada de firma debe existir únicamente como secreto `TAURI_SIGNING_PRIVATE_KEY` del repositorio; nunca debe incluirse en Git. La versión HTML abierta directamente no puede usar este actualizador nativo.
+Para publicar una actualización, crea el Release en `CriissH/s-getion` con un tag `vX.Y.Z` y adjunta los artefactos firmados generados desde el repositorio privado. La clave privada de firma debe existir únicamente como secreto `TAURI_SIGNING_PRIVATE_KEY` del repositorio privado; nunca debe incluirse en Git. La versión HTML abierta directamente no puede usar este actualizador nativo.
 
 ## Generar el instalador Tauri
 
