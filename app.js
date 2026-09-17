@@ -1,7 +1,16 @@
 const STORAGE_KEY = "saldo-expenses-v1";
 const APP_VERSION = "1.0.4";
 const palette = ["#177b55", "#ed9c54", "#8b7ee7", "#5c9ee8", "#d95f59", "#51a68b", "#c77bcb", "#a1a85d"];
-const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉"];
+const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉", "🚗", "🚌", "🚲", "🏥", "💡", "🎁", "🛒", "🐾"];
+const defaultCategories = [
+  { id: "food", name: "Alimentación", color: "#177b55", icon: "▣" },
+  { id: "home", name: "Hogar", color: "#ed9c54", icon: "⌂" },
+  { id: "transport", name: "Transporte", color: "#8b7ee7", icon: "🚗" },
+  { id: "leisure", name: "Ocio", color: "#5c9ee8", icon: "✦" },
+  { id: "health", name: "Salud", color: "#d95f59", icon: "🏥" },
+  { id: "services", name: "Servicios", color: "#5c9ee8", icon: "💡" },
+  { id: "gifts", name: "Regalos", color: "#c77bcb", icon: "🎁" }
+];
 const defaultState = {
   income: 0,
   currentCycleIncome: null,
@@ -19,17 +28,14 @@ const defaultState = {
   savingsBalance: 0,
   savingsHistory: [],
   savingsMovements: [],
-  categories: [
-    { id: "food", name: "Alimentación", color: "#177b55", icon: "▣" },
-    { id: "home", name: "Hogar", color: "#ed9c54", icon: "⌂" },
-    { id: "transport", name: "Transporte", color: "#8b7ee7", icon: "◇" },
-    { id: "leisure", name: "Ocio", color: "#5c9ee8", icon: "✦" }
-  ],
+  categories: structuredClone(defaultCategories),
   expenses: []
 };
 
 let state = loadState();
 let selectedColor = palette[0];
+let selectedIcon = icons[0];
+let categoryToEdit = null;
 let expenseToDelete = null;
 let recurringToEdit = null;
 let recurringToDelete = null;
@@ -67,7 +73,9 @@ function loadState() {
       .map(item => item.recurring && item.frequency === "monthly" && !item.monthlyDay && typeof item.recurringDate === "string"
         ? { ...item, monthlyDay: Number(item.recurringDate.slice(8, 10)) }
         : item);
-    return { ...defaultState, ...saved, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories: saved.categories || defaultState.categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, expenseHistory: saved.expenseHistory || [], darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [] };
+    const categories = [...(saved.categories || [])];
+    defaultCategories.forEach(category => { if (!categories.some(item => item.id === category.id)) categories.push({ ...category }); });
+    return { ...defaultState, ...saved, onboardingComplete: saved.onboardingComplete ?? Number(saved.income) > 0, categories, expenses, incomeHistory: saved.incomeHistory || [], recurringConfirmations: saved.recurringConfirmations || {}, expenseHistory: saved.expenseHistory || [], darkMode: Boolean(saved.darkMode), currentCycleIncome: saved.currentCycleIncome == null ? null : Number(saved.currentCycleIncome), testCycleOverride: saved.testCycleOverride || null, dateMode: saved.dateMode === "debug" ? "debug" : "system", debugDate: saved.debugDate || null, lastCycleStart: saved.lastCycleStart || null, savingsBalance: Number(saved.savingsBalance || 0), savingsHistory: saved.savingsHistory || [], savingsMovements: saved.savingsMovements || [] };
   } catch {
     return structuredClone(defaultState);
   }
@@ -166,6 +174,7 @@ function formatUpdateNotes(notes) {
 }
 function render() {
   document.body.classList.toggle("dark-mode", state.darkMode);
+  document.getElementById("setup-required-card").hidden = Boolean(state.onboardingComplete && state.income > 0);
   closeCompletedCycles();
   applyPendingIncome();
   renderDashboard();
@@ -341,7 +350,7 @@ function renderCategories() {
     const confirmed = confirmedCounts[category.id] || 0;
     const recurring = recurringCounts[category.id] || 0;
     const summary = `${confirmed} ${confirmed === 1 ? "gasto confirmado" : "gastos confirmados"}${recurring ? ` · ${recurring} recurrente${recurring === 1 ? "" : "s"}` : ""}`;
-    return `<article class="category-card"><button class="category-menu" data-delete-category="${category.id}" title="Eliminar categoría">⋯</button><div class="category-icon" style="color:${category.color};background:${category.color}20">${category.icon || icons[index % icons.length]}</div><strong>${escapeHtml(category.name)}</strong><span>${summary}</span></article>`;
+    return `<article class="category-card"><div class="category-card-actions"><button class="category-menu" data-edit-category="${category.id}" title="Editar categoría">✎</button><button class="category-menu" data-delete-category="${category.id}" title="Eliminar categoría">×</button></div><div class="category-icon" style="color:${category.color};background:${category.color}20">${category.icon || icons[index % icons.length]}</div><strong>${escapeHtml(category.name)}</strong><span>${summary}</span></article>`;
   }).join("");
 }
 function renderStatistics() {
@@ -443,12 +452,28 @@ function importBackup(file) {
       if (!encoded) throw new Error("Formato no reconocido");
       const imported = JSON.parse(decodeURIComponent(escape(atob(encoded))));
       if (!Array.isArray(imported.categories) || !Array.isArray(imported.expenses)) throw new Error("Datos inválidos");
-      state = { ...defaultState, ...imported, onboardingComplete: true }; saveState(); closeModal("welcome-modal"); render(); showToast("Datos restaurados correctamente");
+      const importedCategories = [...(imported.categories || [])];
+      defaultCategories.forEach(category => { if (!importedCategories.some(item => item.id === category.id)) importedCategories.push({ ...category }); });
+      state = { ...defaultState, ...imported, categories: importedCategories, onboardingComplete: true }; saveState(); closeModal("welcome-modal"); render(); showToast("Datos restaurados correctamente");
     } catch { showToast("No se pudo leer el respaldo. Usa un archivo exportado desde Saldo.", true); }
   };
   reader.readAsText(file);
 }
-function buildColorPicker() { document.getElementById("color-picker").innerHTML = palette.map(color => `<button type="button" class="color-option ${color === selectedColor ? "selected" : ""}" style="background:${color}" data-color="${color}" aria-label="Seleccionar color"></button>`).join(""); }
+function buildColorPicker() {
+  document.getElementById("color-picker").innerHTML = palette.map(color => `<button type="button" class="color-option ${color === selectedColor ? "selected" : ""}" style="background:${color}" data-color="${color}" aria-label="Seleccionar color"></button>`).join("");
+  document.getElementById("icon-picker").innerHTML = icons.map(icon => `<button type="button" class="icon-option ${icon === selectedIcon ? "selected" : ""}" data-icon="${icon}" aria-label="Seleccionar ícono">${icon}</button>`).join("");
+}
+function openCategoryEditor(id = null) {
+  categoryToEdit = id;
+  const category = id ? state.categories.find(item => item.id === id) : null;
+  selectedColor = category?.color || palette[0];
+  selectedIcon = category?.icon || icons[0];
+  document.getElementById("category-modal-title").textContent = category ? "Editar categoría" : "Nueva categoría";
+  document.getElementById("category-submit-button").textContent = category ? "Guardar cambios" : "Crear categoría";
+  document.getElementById("category-name-input").value = category?.name || "";
+  buildColorPicker();
+  openModal("category-modal");
+}
 
 document.addEventListener("click", event => {
   const nav = event.target.closest("[data-view]");
@@ -470,9 +495,14 @@ document.addEventListener("click", event => {
   if (confirmButton) confirmRecurring(confirmButton.dataset.confirmRecurring, true);
   const rejectButton = event.target.closest("[data-reject-recurring]");
   if (rejectButton) confirmRecurring(rejectButton.dataset.rejectRecurring, false);
-  if (event.target.id === "new-category-button") { buildColorPicker(); openModal("category-modal"); }
+  if (event.target.id === "open-welcome-button") { document.getElementById("welcome-modal").hidden = false; setTimeout(() => document.getElementById("welcome-income-input").focus(), 0); }
+  if (event.target.id === "new-category-button") openCategoryEditor();
+  const editCategory = event.target.closest("[data-edit-category]");
+  if (editCategory) openCategoryEditor(editCategory.dataset.editCategory);
   const color = event.target.closest("[data-color]");
   if (color) { selectedColor = color.dataset.color; buildColorPicker(); }
+  const icon = event.target.closest("[data-icon]");
+  if (icon) { selectedIcon = icon.dataset.icon; buildColorPicker(); }
   const deleteButton = event.target.closest("[data-delete-expense]");
   if (deleteButton) { expenseToDelete = deleteButton.dataset.deleteExpense; openModal("delete-modal"); }
   if (event.target.id === "confirm-delete") { state.expenses = state.expenses.filter(item => item.id !== expenseToDelete); saveState(); closeModal("delete-modal"); render(); showToast("Gasto eliminado"); }
@@ -511,8 +541,13 @@ document.getElementById("expense-form").addEventListener("submit", event => {
 });
 document.getElementById("category-form").addEventListener("submit", event => {
   event.preventDefault(); const name = document.getElementById("category-name-input").value.trim();
-  if (state.categories.some(category => category.name.toLowerCase() === name.toLowerCase())) return showToast("Ya existe una categoría con ese nombre.", true);
-  state.categories.push({ id: `category-${Date.now()}`, name, color: selectedColor, icon: icons[state.categories.length % icons.length] }); saveState(); event.target.reset(); closeModal("category-modal"); render(); showToast("Categoría creada");
+  if (state.categories.some(category => category.name.toLowerCase() === name.toLowerCase() && category.id !== categoryToEdit)) return showToast("Ya existe una categoría con ese nombre.", true);
+  if (categoryToEdit) {
+    const category = state.categories.find(item => item.id === categoryToEdit);
+    if (category) Object.assign(category, { name, color: selectedColor, icon: selectedIcon });
+  } else state.categories.push({ id: `category-${Date.now()}`, name, color: selectedColor, icon: selectedIcon });
+  const wasEditing = Boolean(categoryToEdit);
+  saveState(); event.target.reset(); categoryToEdit = null; closeModal("category-modal"); render(); showToast(wasEditing ? "Categoría actualizada" : "Categoría creada");
 });
 document.getElementById("settings-form").addEventListener("submit", event => { event.preventDefault(); state.income = Number(document.getElementById("income-input").value); state.currentCycleIncome = null; state.cutoffDay = Number(document.getElementById("cutoff-input").value); saveState(); render(); showToast("Configuración guardada"); });
 document.getElementById("advance-cycle-button").addEventListener("click", () => {
