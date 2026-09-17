@@ -1,5 +1,5 @@
 const STORAGE_KEY = "saldo-expenses-v1";
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 const palette = ["#177b55", "#ed9c54", "#8b7ee7", "#5c9ee8", "#d95f59", "#51a68b", "#c77bcb", "#a1a85d"];
 const icons = ["⌂", "▣", "◇", "✦", "♧", "●", "◆", "◉"];
 const defaultState = {
@@ -36,6 +36,7 @@ let recurringToDelete = null;
 let expenseToEdit = null;
 let availableUpdate = null;
 let updateBackupExported = false;
+let welcomeImportFile = null;
 const money = value => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value || 0);
 const dateFormat = value => new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "short" }).format(new Date(`${value}T12:00:00`)).replace(".", "");
 function effectiveDate() {
@@ -693,8 +694,17 @@ document.getElementById("restore-button").addEventListener("click", () => docume
 document.getElementById("import-button").addEventListener("click", () => document.getElementById("import-file").click());
 document.getElementById("welcome-import-button").addEventListener("click", () => document.getElementById("welcome-import-file").click());
 document.getElementById("welcome-import-file").addEventListener("change", event => {
-  if (event.target.files[0]) importBackup(event.target.files[0]);
+  welcomeImportFile = event.target.files[0] || null;
+  const confirm = document.getElementById("welcome-import-confirm");
+  document.getElementById("welcome-import-status").textContent = welcomeImportFile ? `${welcomeImportFile.name} seleccionado. Confirma para restaurar los datos.` : "Después de seleccionarlo, confirma la importación.";
+  confirm.hidden = !welcomeImportFile;
   event.target.value = "";
+});
+document.getElementById("welcome-import-confirm").addEventListener("click", () => {
+  if (!welcomeImportFile) return;
+  importBackup(welcomeImportFile);
+  welcomeImportFile = null;
+  document.getElementById("welcome-import-confirm").hidden = true;
 });
 document.getElementById("import-file").addEventListener("change", event => { if (event.target.files[0]) importBackup(event.target.files[0]); event.target.value = ""; });
 document.getElementById("reset-system-button").addEventListener("click", () => openModal("reset-modal"));
