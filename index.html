@@ -3,28 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Saldo: gestión personal de presupuesto, gastos, ingresos y metas de ahorro." />
-    <title>Saldo · Gestión personal</title>
+    <meta name="description" content="Saldo: aplicación de escritorio para Windows de gestión personal de presupuesto, gastos, ahorro y compras colectivas." />
+    <title>Saldo · Controla tu dinero con claridad</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="page-shell">
+      
+      <!-- 1. HEADER -->
       <nav class="topbar">
         <a class="brand" href="#">
           <span class="brand-mark">S</span>
           <span><strong>Saldo</strong><small>Gestión personal</small></span>
         </a>
-        <a class="release-link" href="https://github.com/CriissH/s-gestion/releases" target="_blank" rel="noreferrer">Descargar una versión</a>
+        <div class="nav-links">
+          <a class="release-link" href="https://github.com/CriissH/s-gestion/releases" target="_blank" rel="noreferrer">Descargar para Windows</a>
+          <a class="button cafecito" href="https://cafecito.app/saldoapp" target="_blank">☕ Invitame un Cafecito</a>
+        </div>
       </nav>
 
+      <!-- 2. HERO -->
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Ordená tu dinero con claridad</p>
-          <h1>Tu presupuesto,<br /><em>en equilibrio.</em></h1>
-          <p class="hero-text">Saldo es una aplicación de gestión financiera personal que te ayuda a entender cuánto tenés, en qué lo gastás y qué podés planificar.</p>
+          <p class="eyebrow">App nativa para Windows</p>
+          <h1>Controla tu dinero <br /><em>con claridad.</em></h1>
+          <p class="hero-text">Organiza tus ingresos, registra tus gastos y descubre cuánto dinero realmente tienes disponible. Todo simple, privado y desde un solo lugar.</p>
           <div class="hero-actions">
-            <a class="button primary" href="https://github.com/CriissH/s-gestion/releases" target="_blank" rel="noreferrer">Ver releases <span>→</span></a>
-            <a class="button secondary" href="#about">Conocer más</a>
+            <a class="button primary" href="https://github.com/CriissH/s-gestion/releases" target="_blank">Descargar instalador (.exe) <span>→</span></a>
+            <a class="button secondary" href="#como-funciona">Saber más ↓</a>
           </div>
         </div>
         <div class="balance-card" aria-label="Ejemplo de resumen de Saldo">
@@ -38,26 +44,92 @@
         </div>
       </section>
 
-      <section id="about" class="intro">
-        <p class="eyebrow">¿Qué es Saldo?</p>
-        <h2>Una forma simple de tomar mejores decisiones con tu dinero.</h2>
-        <p>Saldo nace para convertir la información financiera cotidiana en una visión concreta y accionable. Registra tus movimientos, contempla tus compromisos y mirá el futuro de tu presupuesto antes de decidir.</p>
+      <!-- 3. CÓMO FUNCIONA (NUEVO) -->
+      <section id="como-funciona" class="steps-section">
+        <p class="eyebrow">¿Cómo funciona?</p>
+        <h2>Tres pasos para tu tranquilidad financiera</h2>
+        <div class="steps-grid">
+            <div class="step">
+                <span class="step-number">1</span>
+                <h3>Configura tu punto de partida</h3>
+                <p>Ingresa tu saldo inicial y define tu fecha de cobro para establecer el ciclo.</p>
+            </div>
+            <div class="step">
+                <span class="step-number">2</span>
+                <h3>Registra tus compromisos</h3>
+                <p>Anota tus gastos diarios y configura los pagos recurrentes (servicios, cuotas).</p>
+            </div>
+            <div class="step">
+                <span class="step-number">3</span>
+                <h3>Descubre tu saldo real</h3>
+                <p>La app calcula automáticamente tu proyección mensual y tu dinero disponible.</p>
+            </div>
+        </div>
       </section>
 
-      <section class="feature-grid">
-        <article class="feature"><span class="feature-icon green">↗</span><h3>Presupuesto claro</h3><p>Visualizá tu ingreso, tus gastos del ciclo y cuánto dinero queda disponible.</p></article>
-        <article class="feature"><span class="feature-icon orange">◷</span><h3>Recurrentes bajo control</h3><p>SeguÍ pagos e ingresos recurrentes, sus vencimientos y el impacto que tienen en tu proyección.</p></article>
-        <article class="feature"><span class="feature-icon purple">♡</span><h3>Metas posibles</h3><p>Definí objetivos de ahorro con sugerencias prudentes, basadas en tu presupuesto real.</p></article>
+      <!-- 4. CARACTERÍSTICAS PRINCIPALES -->
+      <section class="features-section">
+        <div class="features-header">
+            <p class="eyebrow">Todo lo que necesitas</p>
+            <h2>Planifica hoy, ahorra mañana.</h2>
+            <p>Saldo no es solo una lista de gastos. Es una herramienta diseñada para anticiparse a los problemas y ayudarte a tomar decisiones financieras con información real.</p>
+        </div>
+
+        <div class="feature-grid">
+            <article class="feature">
+                <span class="feature-icon green">📈</span>
+                <h3>Proyección inteligente</h3>
+                <p>Analiza tus recurrentes pendientes y calcula cuánto dinero exacto te quedará al finalizar el mes.</p>
+            </article>
+            <article class="feature">
+                <span class="feature-icon orange">◷</span>
+                <h3>Gestión de recurrentes</h3>
+                <p>Administra alquiler, servicios y suscripciones. Márcarlos como pendientes, aprobados o postergados.</p>
+            </article>
+            <article class="feature">
+                <span class="feature-icon purple">🤝</span>
+                <h3>Compra colectiva</h3>
+                <p>Registra gastos compartidos (asados, viajes). La app calcula automáticamente quién le debe a quién.</p>
+            </article>
+            <article class="feature">
+                <span class="feature-icon green">💰</span>
+                <h3>Ahorro automático</h3>
+                <p>Al cerrar el ciclo, el saldo positivo sobrante se transfiere automáticamente a tu fondo de ahorro.</p>
+            </article>
+            <article class="feature">
+                <span class="feature-icon orange">📊</span>
+                <h3>Informes y Excel</h3>
+                <p>Visualiza estadísticas de consumo, genera reportes en PDF o exporta toda tu data a Excel.</p>
+            </article>
+            <article class="feature">
+                <span class="feature-icon purple">🔒</span>
+                <h3>Privacidad 100% local</h3>
+                <p>Tus números son tuyos. Todo se guarda localmente en tu PC sin depender de la nube de terceros.</p>
+            </article>
+        </div>
       </section>
 
-      <section class="purpose">
-        <div><p class="eyebrow">El propósito</p><h2>Planificar sin perder de vista el presente.</h2></div>
-        <p>Saldo está pensada para que administrar tus finanzas no sea una tarea pesada. Su fin es ayudarte a anticipar obligaciones, evitar decisiones a ciegas y construir hábitos sostenibles de ahorro, siempre con tus datos guardados localmente en tu dispositivo.</p>
+      <!-- 5. SOBRE MÍ -->
+      <section class="about-me">
+        <h2>Detrás del código</h2>
+        <div class="about-content">
+            <p>¡Hola! Soy Cristian, el desarrollador detrás de Saldo. Soy estudiante de la Licenciatura en Sistemas de Información y Técnico Superior en Seguridad e Higiene (sí, nada que ver, pero ahí andamos).</p>
+            <p>Saldo nació de la pura necesidad diaria. Todo empezó como un pedido de uno de mis amigos más cercanos para organizar sus números sin volverse loco. Al mismo tiempo, yo también necesitaba administrar al milímetro el presupuesto de mi casa y calcular los viáticos para ir a cursar sin quedar en rojo a mitad de mes.</p>
+            <p>Quería una herramienta rápida, desarrollada de forma nativa (usando Tauri para Windows) y con una regla de oro: que los datos financieros de las personas no vayan a la nube de nadie. Además, este proyecto es mi espacio de aprendizaje personal para explorar nuevas herramientas de desarrollo y entender cómo adaptarlas al nuevo paradigma de la Inteligencia Artificial.</p>
+            <p>La app la desarrollo y mantengo en mi tiempo libre. Si Saldo te está ayudando a sobrevivir a la economía de guerra, a planificar mejor o simplemente a llegar más tranquilo al próximo cobro, podés darme una mano:</p>
+        </div>
+        <div class="cafecito-cta">
+            <a class="button cafecito-large" href="https://cafecito.app/saldoapp" target="_blank">☕ Invitame un Cafecito</a>
+            <small>(Cualquier aporte ayuda a bancar los viajes de cursada, los apuntes y mantener este proyecto vivo)</small>
+        </div>
       </section>
 
+      <!-- 6. FOOTER -->
       <footer>
-        <span>Saldo · Gestión personal</span>
-        <a href="https://github.com/CriissH/s-gestion/releases" target="_blank" rel="noreferrer">Releases en GitHub ↗</a>
+        <span>© 2026 Cristian Herrera. Desarrollado a puro café y sobre un 57.</span>
+        <div class="footer-links">
+            <a href="https://github.com/CriissH/s-gestion" target="_blank" rel="noreferrer">Código en GitHub</a>
+        </div>
       </footer>
     </main>
   </body>
