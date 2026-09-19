@@ -14,7 +14,8 @@ a{color:inherit;text-decoration:none}
 .brand small{color:var(--muted);font-size:11px;margin-top:2px}
 
 .nav-links { display: flex; align-items: center; gap: 20px; }
-.release-link{color:var(--green);font-size:13px;font-weight:800}
+.nav-text-link {color:var(--green);font-size:13px;font-weight:800; transition: color 0.2s;}
+.nav-text-link:hover {color:var(--green-dark);}
 
 .hero{display:grid;grid-template-columns:1.05fr .95fr;gap:70px;align-items:center;padding:92px 0 100px}
 .eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin:0}
@@ -46,9 +47,9 @@ a{color:inherit;text-decoration:none}
 .projection strong{display:block;font-size:23px;margin:5px 0}
 
 /* Secciones generales */
-.steps-section, .features-section {margin-top: 50px; padding-top: 50px; border-top: 1px solid var(--line);}
-.steps-section h2, .features-header h2, .about-me h2 {font-size:clamp(27px,4vw,41px);letter-spacing:-1.5px;line-height:1.1;margin:12px 0 15px}
-.features-header p {color:var(--muted);font-size:15px;line-height:1.7;max-width:650px; margin-bottom: 40px;}
+.steps-section, .features-section, .roadmap {margin-top: 50px; padding-top: 50px; border-top: 1px solid var(--line);}
+.steps-section h2, .features-header h2, .roadmap h2, .about-me h2 {font-size:clamp(27px,4vw,41px);letter-spacing:-1.5px;line-height:1.1;margin:12px 0 15px}
+.features-header p, .roadmap-intro {color:var(--muted);font-size:15px;line-height:1.7;max-width:650px; margin-bottom: 40px;}
 
 /* Cómo Funciona (Pasos) */
 .steps-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 40px;}
@@ -68,6 +69,77 @@ a{color:inherit;text-decoration:none}
 .feature h3{font-size:16px;margin:20px 0 10px; letter-spacing: -0.3px;}
 .feature p{color:var(--muted);font-size:13.5px;line-height:1.6;margin:0}
 
+/* Roadmap (Línea de tiempo con Flexbox perfecto) */
+.timeline {
+  position: relative;
+  margin-top: 40px;
+  padding-left: 10px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  bottom: 15px;
+  left: 19px; 
+  width: 2px;
+  background: var(--line);
+}
+.timeline-item {
+  position: relative;
+  display: flex;
+  align-items: center; /* Alinea verticalmente el punto exacto con el contenido de la derecha */
+  gap: 22px;
+  margin-bottom: 25px;
+}
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+.timeline-dot {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 4px solid var(--muted);
+  margin-left: 10px;
+  z-index: 2;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+.timeline-dot.active {
+  border-color: var(--green);
+  background: var(--green-light);
+  box-shadow: 0 0 0 4px rgba(23, 123, 85, 0.1);
+}
+.timeline-dot.upcoming { border-color: var(--orange); }
+.timeline-dot.planned-1 { border-color: var(--purple); }
+.timeline-dot.planned-2 { border-color: var(--muted); }
+
+.timeline-content {
+  flex-grow: 1;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  transition: transform 0.2s ease;
+}
+.timeline-content:hover {
+  transform: translateX(3px);
+}
+.timeline-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+.timeline-content p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 /* Sobre Mí */
 .about-me {margin-top: 75px; padding: 45px; background: var(--green-light); border-radius: 19px; border: 1px solid #d1ebd9;}
 .about-content {font-size: 14.5px; color: var(--ink); line-height: 1.7; margin-bottom: 30px; max-width: 800px;}
@@ -75,20 +147,28 @@ a{color:inherit;text-decoration:none}
 .cafecito-cta {display: flex; flex-direction: column; align-items: flex-start;}
 .cafecito-cta small {color: var(--green-dark); font-size: 12px; margin-top: 5px;}
 
-/* Footer */
-footer{display:flex;justify-content:space-between; align-items: center; border-top:1px solid var(--line);margin-top: 75px; padding: 25px 0 20px; color:var(--muted);font-size:12px}
+/* Footer con Correo */
+footer{display:flex;justify-content:space-between; align-items: flex-end; border-top:1px solid var(--line);margin-top: 75px; padding: 25px 0 20px; color:var(--muted);font-size:12px}
+.footer-info {display: flex; flex-direction: column; gap: 6px;}
+.footer-email {color: var(--green); font-weight: 600; font-size: 13px; transition: color 0.2s;}
+.footer-email:hover {color: var(--green-dark); text-decoration: underline;}
 footer a{color:var(--green);font-weight:800}
 .footer-links {display: flex; gap: 15px;}
 
 @media(max-width:760px){
   .page-shell{padding:22px 18px}
-  .nav-links {gap: 10px;}
-  .release-link{display: none;}
+  .nav-links {gap: 15px; flex-wrap: wrap; justify-content: center;}
+  .nav-text-link{display: none;}
   .hero{grid-template-columns:1fr;gap:45px;padding:65px 0 75px}
   .balance-card{margin:auto;transform:none}
   .steps-grid {grid-template-columns: 1fr; gap: 25px;}
   .feature-grid{grid-template-columns:1fr}
+  .timeline::before {left: 13px;}
+  .timeline-dot {margin-left: 4px;}
+  .timeline-item {gap: 15px;}
+  .timeline-content {padding: 18px;}
   .about-me {padding: 25px;}
   .hero h1{letter-spacing:-2px}
-  footer{flex-direction:column; text-align: center; gap: 15px;}
+  footer{flex-direction:column; align-items: center; text-align: center; gap: 18px;}
+  .footer-info {align-items: center;}
 }
